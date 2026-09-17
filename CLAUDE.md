@@ -19,6 +19,7 @@ y el estudio de viabilidad en `docs/Estudio_CRC_Strava_MCP.md`. Léelos antes de
 - VO2max siempre se etiqueta `estimated_vo2max`.
 - Ninguna respuesta pública puede contener `NaN` o `Infinity` (convertir a `null` + warning).
 - No reutilizar `downsampleStream` del código original: desalinea señales. Usar `src/crc/streams/alignedStreams.ts`.
+- Calcular y persistir van en tools separadas. Las tools MCP son sin estado y no pueden esperar una confirmación del usuario, así que toda regla del tipo "confirmar antes de X" se implementa partiendo la operación en dos llamadas, nunca confiando en el comportamiento del orquestador. Ver D12 en `docs/decisiones.md`. Es el mismo principio que "nada se delega al LLM" aplicado a la escritura: no confiar al modelo lo que debe garantizar el código.
 
 ## Arquitectura
 - `src/crc/analytics/` y `src/crc/streams/`: funciones puras, SIN dependencias de Strava ni de MCP. Reciben `AlignedStreams`.

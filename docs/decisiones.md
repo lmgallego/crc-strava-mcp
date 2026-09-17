@@ -176,11 +176,30 @@ valor tiene que salir del propio usuario o de sus datos de Strava.
 **Flujo acordado:**
 
 1. **Preguntar siempre primero al usuario.** Si lo declara, `source: "manual"`.
+   *Orientación del orquestador, no invariante:* preguntar es comportamiento
+   deseable pero no puede garantizarse por código. La invariante real es la de
+   los puntos 3 y 4: se pregunte o no, nada se persiste sin una segunda llamada
+   explícita.
 2. Si no lo sabe, **estimar desde su historial**: mejor 20 min × 0,95.
-3. **Nunca guardar la estimación en silencio.** Se propone el valor, se explica de
-   qué actividad y fecha sale, y se espera confirmación del usuario antes de
-   persistirlo.
-4. El valor estimado se guarda con `source: "estimated_20min"`, nunca `"manual"`.
+3. **La estimación NO persiste.** `crc-estimate-ftp` devuelve la propuesta
+   (`available: true`) con el valor, la actividad y la fecha de origen, pero no
+   escribe en el perfil.
+4. **Guardar exige una llamada explícita y separada** a
+   `crc-set-performance-profile` con `source: "estimated_20min"`. La separación
+   entre calcular y persistir es lo que garantiza que nada se guarde en silencio:
+   es una propiedad del diseño, no una instrucción de comportamiento para el
+   orquestador.
+
+> **Por qué se separa en dos llamadas.** Las tools MCP son sin estado y no pueden
+> bloquearse esperando una respuesta del usuario: no existe "pregunta y espera"
+> dentro de una tool. Por eso cualquier regla del tipo *"pedir confirmación antes
+> de X"* debe implementarse **separando la operación en dos llamadas** —una que
+> calcula y propone, otra que persiste—, nunca confiando en que el modelo que
+> orquesta se comporte como se le ha pedido. Una instrucción que el orquestador
+> puede ignorar no es una garantía; una tool que no sabe escribir, sí.
+>
+> Esto vale como **principio general del proyecto**, no solo para el FTP:
+> aplica a cualquier operación futura que deba confirmarse antes de tener efecto.
 
 **Implicaciones que hay que respetar cuando se implemente:**
 
