@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { stravaId } from "../schemas/stravaId.js";
 import {
     getSegmentLeaderboard as fetchSegmentLeaderboard,
     StravaLeaderboardResponse
 } from '../stravaClient.js';
 
 export const inputSchema = z.object({
-    segmentId: z.number().int().positive().describe(
+    segmentId: stravaId.describe(
         'The unique identifier of the segment to fetch the leaderboard for.'
     ),
     gender: z.enum(['M', 'F']).optional().describe(
@@ -46,7 +47,7 @@ function formatTime(seconds: number): string {
     return `${s}s`;
 }
 
-export function formatLeaderboard(data: StravaLeaderboardResponse, segmentId: number): string {
+export function formatLeaderboard(data: StravaLeaderboardResponse, segmentId: number | string): string {
     let output = `🏆 **Segment Leaderboard** (ID: ${segmentId})\n`;
     output += `   Total efforts: ${data.effort_count} | Entries shown: ${data.entries.length}\n\n`;
 

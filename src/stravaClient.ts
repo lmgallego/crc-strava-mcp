@@ -598,7 +598,7 @@ export async function getAuthenticatedAthlete(accessToken: string): Promise<Stra
  * @returns A promise that resolves to the athlete's activity statistics.
  * @throws Throws an error if the API request fails or the response format is unexpected.
  */
-export async function getAthleteStats(accessToken: string, athleteId: number): Promise<StravaStats> {
+export async function getAthleteStats(accessToken: string, athleteId: number | string): Promise<StravaStats> {
     if (!accessToken) {
         throw new Error("Strava access token is required.");
     }

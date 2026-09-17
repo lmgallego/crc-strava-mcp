@@ -1,9 +1,10 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { z } from "zod";
+import { stravaId } from "../schemas/stravaId.js";
 import { starSegment as updateStarStatus } from "../stravaClient.js"; // Renamed import
 
 const StarSegmentInputSchema = z.object({
-    segmentId: z.number().int().positive().describe("The unique identifier of the segment to star or unstar."),
+    segmentId: stravaId.describe("The unique identifier of the segment to star or unstar."),
     starred: z.boolean().describe("Set to true to star the segment, false to unstar it."),
 });
 

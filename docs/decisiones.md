@@ -70,3 +70,62 @@ Sí se corrigió lo que no requería tocar esquemas:
 
 Confirmada la decisión 6 del estudio e implementada en `crcUnavailable()`.
 `isError` queda reservado a fallos de entrada o de red.
+
+## Sprint 2 — Streams y perfil (17/09/2026)
+
+### D5. D3 aplicado como ampliación de tipo, no como sustitución
+
+Las 7 tools con `z.number().int().positive()` pasan a `stravaId`
+(`number | string` → siempre string). Verificado con
+`node scripts/snapshot-tools.mjs --diff`: cambian exactamente esos 7
+`inputSchema` y solo en el campo del ID.
+
+```
+antes:   "activityId": {"type":"integer","exclusiveMinimum":0,...}
+después: "activityId": {"type":["string","number"],...}
+```
+
+Matiz honesto: al ampliarse el tipo se pierden las facetas `integer` y
+`exclusiveMinimum: 0` del JSON Schema. En runtime la validación **no** se
+relaja (el helper exige `/^\d+$/`), salvo en un detalle: `"0"` supera el
+esquema y antes lo rechazaba `exclusiveMinimum`. Llega a la API como 404. Se
+acepta: ningún cliente que funcionara antes deja de funcionar.
+
+### D6. `stravaId` movido a `src/schemas/stravaId.ts`
+
+Usarlo en las tools originales habría violado la regla no negociable *"las
+herramientas originales NUNCA importan nada de `src/crc/`"*. El helper es
+neutral (no depende de la capa analítica), así que vive en `src/schemas/` y
+`src/crc/schemas/mcpSchemas.ts` lo reexporta: una sola definición, regla intacta.
+
+### D7. Relleno de huecos: interpolación lineal
+
+La especificación exige rellenar huecos ≤ `gap_fill_s` pero no dice cómo. Se
+elige **interpolación lineal**, correcta para señales acumulativas (distance,
+altitude) y aceptable en tramos de ≤ 3 s para watts y FC. En los huecos largos
+se arrastra el último valor únicamente para conservar la longitud del array;
+`valid[i] === false` los excluye y las ventanas móviles no deben cruzarlos.
+Queda declarado en `meta.method`.
+
+Un `0` es siempre un dato legítimo (rueda libre, parado) y nunca cuenta como
+ausencia: solo `null`, `undefined` y no finitos son "falta".
+
+### D8. `power_source` desconocido = `estimated`
+
+Si no se conoce `device_watts`, la potencia se marca `estimated` y se avisa.
+Asumir `measured` sin evidencia inflaría la confianza en power curve y VO2max,
+que son justo los cálculos que la especificación prohíbe con potencia estimada.
+
+### D9. Caché de streams
+
+`~/.config/strava-mcp/crc-cache/streams/<activityId>-<hash de tipos>.json`.
+Se cachea la respuesta **cruda**, no la alineada, para poder realinear con otro
+`gap_fill_s` sin volver a llamar a Strava. Topes: 200 entradas y 128 MB, podando
+por fecha de modificación. Invalidación: `refresh: true` por llamada,
+`clearStreamCache(activityId?)`, y `CACHE_VERSION` que invalida todo al cambiar
+el formato. Un fallo de caché nunca tumba la petición.
+
+### D10. `scripts/snapshot-tools.mjs`
+
+La verificación de `tools/list` se repetía en cada sprint; queda como script
+reutilizable con modo `--diff`.
