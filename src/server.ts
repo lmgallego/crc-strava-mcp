@@ -32,6 +32,7 @@ import { getServerVersionTool } from "./tools/getServerVersion.js";
 import { connectStravaTool, disconnectStravaTool, checkStravaConnectionTool } from './tools/connectStrava.js';
 import { getSegmentLeaderboardTool } from './tools/getSegmentLeaderboard.js';
 import { loadConfig } from './config.js';
+import { registerCrcTools } from './crc/registerCrcTools.js';
 
 // Import the actual client function
 // import {
@@ -229,6 +230,9 @@ server.tool(
     getSegmentLeaderboardTool.inputSchema?.shape ?? {},
     getSegmentLeaderboardTool.execute
 );
+
+// --- CRC tools (registradas al final, después de las originales) ---
+registerCrcTools(server);
 
 // --- Helper Functions ---
 // Moving formatDuration to utils or keeping it here if broadly used.

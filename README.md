@@ -12,6 +12,24 @@ Connect Claude to your Strava account and ask questions in plain English: "How f
 
 ---
 
+## CRC fork
+
+Este repositorio es un fork de [r-huijts/strava-mcp](https://github.com/r-huijts/strava-mcp) que
+añade una **capa analítica determinista (CRC)** sobre los datos de Strava.
+
+- **Qué añade.** Métricas de entrenamiento calculadas en TypeScript, no estimadas por el LLM:
+  potencia normalizada (NP), intensity factor (IF), TSS, trabajo en kJ, curvas de potencia,
+  desacople aeróbico, torque y VO2max estimado. Las fórmulas son puras, testeadas y declaran
+  siempre su `method`.
+- **Qué NO cambia.** Las herramientas originales del servidor mantienen su nombre, contrato y
+  comportamiento. La capa CRC vive aislada en `src/crc/` y se registra aparte; el código original
+  nunca importa de ella.
+- **Privacidad.** Los datos solo se muestran al **propio usuario autenticado**. Una instancia =
+  un atleta. Sin multitenencia, sin compartir entre usuarios y sin exportar a terceros. Al modelo
+  solo se le devuelven métricas agregadas en JSON: las tools CRC nunca exponen streams crudos.
+
+Ver `CLAUDE.md` para las reglas de desarrollo y `docs/` para la especificación técnica.
+
 ## What Can You Do With This?
 
 Once connected, just talk to Claude like you're talking to a friend who has access to all your Strava data:

@@ -1,0 +1,490 @@
+**CRC STRAVA MCP**
+
+**Especificación técnica · v0.1**
+
+Capa determinista de análisis de rendimiento ciclista sobre r-huijts/strava-mcp
+
+Objetivo: conservar las herramientas originales de acceso a Strava y añadir herramientas CRC para cálculo reproducible, trazable y orientado al entrenador.
+
+*CRC Cycling · Septiembre 2026*
+
+# 1. Alcance y principios de diseño
+
+CRC Strava MCP v0.1 se plantea como un fork compatible con el proyecto original. La capa original seguirá encargándose de OAuth, Strava API, actividades, streams, vueltas, zonas, segmentos, rutas y exportaciones. CRC añadirá una capa analítica separada.
+
+Datos primero: Strava aporta únicamente los campos que realmente expone su API.
+
+Cálculo determinista: NP, IF, TSS, curvas, desacople, torque y demás métricas se calculan en TypeScript, no por el LLM.
+
+Interpretación después: Claude/Codex recibe resultados estructurados y los interpreta.
+
+Sin parámetros inventados: AeT, MAP y otros parámetros no disponibles en Strava serán opcionales y de fuente explícita.
+
+Trazabilidad: cada métrica derivada debe indicar método, inputs, unidades, calidad de datos y limitaciones.
+
+Compatibilidad: las herramientas originales no se eliminan ni se renombran en v0.1.
+
+# 2. Estado del repositorio base
+
+El repositorio r-huijts/strava-mcp proporciona actualmente acceso MCP a perfil, actividades, streams, vueltas, zonas, segmentos, rutas, clubes, fotos, estadísticas y exportaciones. Su README documenta 25 herramientas y un formato compacto para streams. El fork CRC se construirá encima de esa capa, evitando duplicar el cliente Strava.
+
+Antes de añadir analítica se corregirán dos riesgos técnicos: normalización de IDs/booleanos entre clientes MCP y alineación temporal de streams durante reducción de datos. El repositorio mantiene issues abiertas sobre compatibilidad de parámetros y sobre IDs de 64 bits, por lo que CRC debe tratar los identificadores como strings canónicos cuando puedan superar la precisión segura de JavaScript.
+
+# 3. Arquitectura propuesta
+
+Strava API
+
+    |
+
+    v
+
+src/stravaClient.ts
+
+    |
+
+    +---------------- Original MCP tools ----------------+
+
+    |                                                    |
+
+    +--> src/tools/*                                     |
+
+    |                                                    |
+
+    +---------------- CRC layer -------------------------+
+
+         src/crc/
+
+           schemas/
+
+           profile/
+
+           streams/
+
+           analytics/
+
+           tools/
+
+           tests/
+
+                    |
+
+                    v
+
+              Claude / Codex
+
+Regla de dependencia: las herramientas CRC pueden consumir stravaClient y módulos CRC; las herramientas originales no deben depender de CRC.
+
+# 4. Catálogo CRC v0.1
+
+| **#** | **Tool** | **Responsabilidad** |
+| --- | --- | --- |
+| 1 | crc-get-performance-profile | Lee parámetros fisiológicos CRC vigentes. |
+| 2 | crc-set-performance-profile | Guarda/actualiza parámetros CRC con fuente y fecha. |
+| 3 | crc-analyze-cycling-activity | Orquestador: resumen determinista de una actividad. |
+| 4 | crc-calculate-power-metrics | NP, IF, TSS, VI, kJ, W/kg y potencia media. |
+| 5 | crc-power-curve | Mejores medias de potencia por duración, W y W/kg. |
+| 6 | crc-aerobic-decoupling | Desacople potencia/FC con filtros y método declarado. |
+| 7 | crc-time-in-zones | Tiempo y porcentaje en zonas de potencia/FC/custom. |
+| 8 | crc-torque-cadence | Torque y potencia por rangos de cadencia. |
+| 9 | crc-work-above-ftp | Tiempo, trabajo y esfuerzos por encima del FTP. |
+| 10 | crc-compare-activities | Comparación homogénea de varias actividades. |
+| 11 | crc-estimate-vo2max | VO2max estimado a partir del mejor 5 min relativo. |
+
+# 5. Perfil de rendimiento CRC
+
+No se denominará athlete profile para evitar confundirlo con el perfil de Strava. Será una configuración fisiológica complementaria. Todos los campos salvo la identidad interna son opcionales.
+
+{
+
+  "metrics": [
+
+    {
+
+      "metric": "ftp_w",
+
+      "value": 320,
+
+      "unit": "W",
+
+      "effective_from": "2026-09-01",
+
+      "effective_to": null,
+
+      "source": "manual"
+
+    },
+
+    {
+
+      "metric": "weight_kg",
+
+      "value": 68.5,
+
+      "unit": "kg",
+
+      "effective_from": "2026-09-01",
+
+      "source": "manual"
+
+    },
+
+    {
+
+      "metric": "aet_power_w",
+
+      "value": 235,
+
+      "unit": "W",
+
+      "effective_from": "2026-08-15",
+
+      "source": "manual"
+
+    }
+
+  ]
+
+}
+
+Campos previstos: ftp_w, weight_kg, hr_max_bpm, aet_power_w, aet_hr_bpm y map_w. AeT y MAP nunca se inferirán de Strava. Una herramienta que no necesite un parámetro debe funcionar aunque no exista.
+
+Resolución histórica: para una actividad de fecha D, seleccionar el valor cuya ventana de vigencia incluya D. Si no existe, devolver missing_parameter; no utilizar silenciosamente el valor actual.
+
+# 6. Alineación y calidad de streams
+
+Todas las métricas multivariables requieren que time[i], watts[i], heartrate[i], cadence[i], altitude[i] y distance[i] representen la misma muestra. CRC creará un módulo de alineación común y no realizará downsampling independiente por señal.
+
+interface AlignedStreams {
+
+  time: number[];
+
+  watts?: number[];
+
+  heartrate?: number[];
+
+  cadence?: number[];
+
+  altitude?: number[];
+
+  distance?: number[];
+
+  grade?: number[];
+
+  moving?: boolean[];
+
+}
+
+Si se reduce resolución, se seleccionará un único vector de índices y se aplicará a todas las señales. Para cálculos exactos como NP, power curve o kJ se preferirá resolución nativa/alta y no una muestra reducida.
+
+Cada salida CRC incluirá un bloque quality con disponibilidad, cobertura, huecos, duración válida y advertencias.
+
+# 7. Especificación de herramientas
+
+## 7.1 crc-get-performance-profile
+
+Entrada: fecha opcional.
+Salida: parámetros CRC vigentes para esa fecha, cada uno con value, unit, source y effective_from.
+Errores: perfil inexistente o métrica no disponible no deben abortar; se devuelve estado parcial.
+
+## 7.2 crc-set-performance-profile
+
+Entrada: metric, value, unit, effective_from, effective_to opcional, source.
+Validación: unidades y rangos plausibles; no sobrescribir histórico sin instrucción explícita.
+Persistencia inicial: ~/.config/strava-mcp/crc-performance-profile.json.
+
+## 7.3 crc-calculate-power-metrics
+
+Inputs mínimos: activityId. FTP y peso se resuelven por fecha desde CRC profile; pueden sobreescribirse explícitamente.
+Métricas: average_power, normalized_power, variability_index, intensity_factor, tss, work_kj, average_wkg.
+NP: implementación estándar basada en media móvil de 30 s, cuarta potencia, media y cuarta raíz.
+IF = NP / FTP.
+TSS = duration_s × NP × IF / (FTP × 3600) × 100.
+VI = NP / average_power.
+Trabajo: integración de potencia respecto al tiempo / 1000.
+
+## 7.4 crc-power-curve
+
+Duraciones por defecto: 1, 5, 10, 15, 30 s; 1, 2, 3, 5, 8, 10, 12, 20, 30, 40, 60 y 90 min.
+Algoritmo: rolling mean sobre potencia alineada y tiempo real. No asumir frecuencia de 1 Hz si el stream demuestra otra cosa.
+Salida: best_power_w, best_power_wkg si existe peso, start_time_s y end_time_s.
+
+## 7.5 crc-aerobic-decoupling
+
+Objetivo: cuantificar cambio de eficiencia potencia/FC.
+Filtros: warmup_exclusion_min, moving_only, power_min_pct_ftp, power_max_pct_ftp, min_valid_duration.
+Método v0.1: comparar EF = power/hr entre dos mitades de la muestra filtrada.
+Salida obligatoria: method, first_half_ef, second_half_ef, decoupling_pct, valid_seconds y filtros aplicados.
+No interpretar automáticamente el resultado como fatiga o adaptación.
+
+## 7.6 crc-time-in-zones
+
+Soporta power, heartrate y custom.
+Para potencia puede recibir límites absolutos o relativos al FTP.
+Salida por zona: seconds, minutes, percent_valid_time y opcional work_kj.
+Las fronteras deben ser inequívocas y documentadas para evitar doble contabilización.
+
+## 7.7 crc-torque-cadence
+
+Torque [N·m] = Power / (2π × cadence/60).
+Excluir cadencia <= 0 y muestras sin potencia válida.
+Bins de cadencia configurables; por defecto 10 rpm.
+Salida: tiempo, potencia media, torque medio/máximo y trabajo por bin.
+
+## 7.8 crc-work-above-ftp
+
+FTP requerido para la fecha.
+Rangos por defecto configurables; propuesta inicial: 100-120 %, 120-150 % y >150 % FTP.
+Por rango: seconds, percent_valid_time, work_kj, effort_count, mean_effort_duration_s y max_effort_duration_s.
+Definir gap_tolerance_s para unir microcortes dentro de un mismo esfuerzo.
+
+## 7.9 crc-compare-activities
+
+Entrada: 2..N activityIds.
+Ejecuta un conjunto estable de métricas CRC y devuelve tabla JSON comparable.
+Debe distinguir missing_data de valor cero.
+No recalcular con FTP actual: cada actividad usa parámetros vigentes en su fecha.
+
+## 7.10 crc-analyze-cycling-activity
+
+Herramienta orquestadora. No duplica fórmulas.
+Compone activity details + power metrics + HR/cadence summaries + zones + decoupling cuando haya datos.
+Cada módulo puede devolver available=false sin invalidar todo el análisis.
+
+## 7.11 crc-estimate-vo2max
+
+Modelo: VO2max [ml·kg⁻¹·min⁻¹] = 16.6 + 8.87 × P5min [W/kg].
+Fuente: modelo publicado para un 5-minute maximal test en ciclistas de carretera.
+Modos:
+- activity: mejor 5 min de una actividad.
+- rolling_period: mejor 5 min observado en un periodo, por defecto 90 días.
+Requiere potencia y peso válido para la fecha del esfuerzo.
+Salida: best_5min_power_w, weight_kg, relative_power_wkg, estimated_vo2max, source_activity_id, effort_start, model_reference y quality.
+Etiqueta obligatoria: estimated_vo2max; nunca lab_vo2max.
+Advertencia: un mejor 5 min observado no equivale necesariamente a un 5MT máximo; si no hay evidencia de esfuerzo máximo, quality debe reflejarlo.
+
+# 8. Contratos JSON
+
+Las herramientas CRC devolverán JSON estructurado en lugar de texto decorativo. El host/LLM será responsable de la presentación.
+
+{
+
+  "tool": "crc-calculate-power-metrics",
+
+  "version": "0.1.0",
+
+  "activity_id": "12345678901234567",
+
+  "inputs": {
+
+    "ftp_w": 320,
+
+    "weight_kg": 68.5
+
+  },
+
+  "metrics": {
+
+    "average_power_w": 241.2,
+
+    "normalized_power_w": 268.4,
+
+    "if": 0.839,
+
+    "tss": 146.8,
+
+    "vi": 1.113,
+
+    "work_kj": 1834.6
+
+  },
+
+  "quality": {
+
+    "power_available": true,
+
+    "valid_seconds": 7604,
+
+    "coverage_pct": 99.2,
+
+    "warnings": []
+
+  }
+
+}
+
+Los IDs de Strava se transportarán como strings en los contratos CRC para evitar pérdida de precisión con enteros de 64 bits.
+
+# 9. Estructura de archivos
+
+src/
+
+  crc/
+
+    schemas/
+
+      mcpSchemas.ts
+
+      crcToolResponse.ts
+
+      performanceProfile.ts
+
+    profile/
+
+      profileStore.ts
+
+      profileResolver.ts
+
+    streams/
+
+      alignedStreams.ts
+
+      streamQuality.ts
+
+    analytics/
+
+      powerMetrics.ts
+
+      powerCurve.ts
+
+      decoupling.ts
+
+      zones.ts
+
+      torqueCadence.ts
+
+      workAboveFtp.ts
+
+      vo2maxEstimate.ts
+
+    tools/
+
+      getPerformanceProfile.ts
+
+      setPerformanceProfile.ts
+
+      analyzeCyclingActivity.ts
+
+      calculatePowerMetrics.ts
+
+      powerCurve.ts
+
+      aerobicDecoupling.ts
+
+      timeInZones.ts
+
+      torqueCadence.ts
+
+      workAboveFtp.ts
+
+      compareActivities.ts
+
+      estimateVo2max.ts
+
+tests/
+
+  crc/
+
+    fixtures/
+
+    alignedStreams.test.ts
+
+    powerMetrics.test.ts
+
+    powerCurve.test.ts
+
+    decoupling.test.ts
+
+    zones.test.ts
+
+    torqueCadence.test.ts
+
+    workAboveFtp.test.ts
+
+    vo2maxEstimate.test.ts
+
+# 10. Cambios sobre server.ts
+
+Registrar las 11 herramientas CRC sin alterar nombres ni contratos de las herramientas originales. Idealmente se extraerá el registro CRC a una función registerCrcTools(server) para reducir acoplamiento.
+
+import { registerCrcTools } from "./crc/registerCrcTools.js";
+
+// Original tools...
+
+registerCrcTools(server);
+
+# 11. Validación y tests
+
+Unit tests de cada fórmula con fixtures conocidos.
+
+Tests de streams con frecuencias irregulares, ceros, huecos y señales ausentes.
+
+Tests de histórico de FTP/peso para asegurar que una actividad antigua no usa valores actuales.
+
+Golden tests de NP, TSS, power curve y trabajo en kJ contra resultados calculados independientemente.
+
+Test VO2max: comprobar exactamente la ecuación publicada y el uso de W/kg.
+
+Tests MCP con IDs como string y booleanos como boolean/string cuando proceda.
+
+Ninguna métrica debe producir NaN/Infinity en la respuesta pública.
+
+# 12. Manejo de errores
+
+| **Código** | **Caso** | **Comportamiento** |
+| --- | --- | --- |
+| MISSING_POWER | No hay stream de potencia | Módulo no disponible; análisis global puede continuar. |
+| MISSING_HR | No hay FC | Desacople no disponible. |
+| MISSING_FTP | No existe FTP vigente | IF/TSS/zonas relativas/work-above-FTP no disponibles. |
+| MISSING_WEIGHT | No existe peso vigente | W/kg y VO2max estimado no disponibles. |
+| INSUFFICIENT_DURATION | Duración menor que ventana requerida | Power curve/5-min estimate no calculable. |
+| LOW_COVERAGE | Cobertura insuficiente | Resultado con warning o no calculable según umbral. |
+| INVALID_PROFILE | Perfil incoherente | Rechazar escritura o cálculo afectado. |
+
+# 13. Roadmap de implementación
+
+| **Sprint** | **Objetivo** | **Entregable** |
+| --- | --- | --- |
+| 0 | Fork y baseline | Build/test original sin cambios funcionales. |
+| 1 | Robustez MCP | IDs seguros, booleanos, errores, registro de tools. |
+| 2 | Streams + profile | AlignedStreams, quality, histórico FTP/peso/etc. |
+| 3 | Potencia | power metrics + power curve + tests. |
+| 4 | Fisiología de campo | decoupling + zones + torque + work above FTP. |
+| 5 | VO2max | estimate-vo2max activity/90d + quality flags. |
+| 6 | Orquestación | analyze activity + compare activities. |
+| 7 | QA | fixtures, regresión, documentación y ejemplos Claude/Codex. |
+
+# 14. Criterios de aceptación v0.1
+
+Las herramientas originales continúan funcionando.
+
+Las 11 herramientas CRC aparecen correctamente en tools/list.
+
+Los cálculos no dependen del razonamiento del LLM.
+
+No se atribuye a Strava ningún dato que Strava no proporcione.
+
+AeT y MAP solo existen si han sido configurados por una fuente explícita.
+
+FTP y peso históricos se resuelven por fecha.
+
+VO2max se etiqueta siempre como estimado y registra el modelo utilizado.
+
+Todas las métricas multistream usan muestras temporalmente alineadas.
+
+La respuesta pública es JSON estable y versionado.
+
+npm run build y npm test finalizan sin errores.
+
+# 15. Decisiones para v0.2
+
+Fuera de alcance de v0.1: detección automática de intervalos, detección de subidas, durability, análisis longitudinal, CTL/ATL/TSB propio, modelos CP/W′ y generación de informes. Se añadirán únicamente después de validar la exactitud de la capa v0.1.
+
+# 16. Referencias técnicas
+
+Repositorio base: r-huijts/strava-mcp (GitHub), rama principal revisada en septiembre de 2026.
+
+Sitko S, et al. Five-Minute Power-Based Test to Predict Maximal Oxygen Consumption in Road Cycling. Modelo utilizado: VO2max = 16.6 + (8.87 × potencia relativa de 5 min). PubMed PMID 34225254.
+
+Nota de mantenimiento: antes de implementar, revisar issues y cambios de la Strava API; el repositorio base mantiene incidencias abiertas relacionadas con IDs de 64 bits y migraciones/deprecaciones de API.
+
+CRC Strava MCP · Especificación técnica v0.1
