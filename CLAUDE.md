@@ -7,6 +7,8 @@ y el estudio de viabilidad en `docs/Estudio_CRC_Strava_MCP.md`. Léelos antes de
 ## Reglas no negociables
 - Las 26 herramientas originales NO se renombran, eliminan ni cambian de contrato.
   (Son 26, no 25: verificado en runtime con `tools/list` contra `dist/server.js`.)
+  Total actual: **28** = 26 originales + 2 CRC (`crc-get-performance-profile` y
+  `crc-set-performance-profile`, Sprint 2).
 - Las herramientas originales NUNCA importan nada de `src/crc/`.
 - Todo cálculo (NP, IF, TSS, kJ, curvas, desacople, torque, VO2max) es TypeScript determinista y testeado. Nada se delega al LLM.
 - Los datos solo se muestran al propio usuario autenticado. Una instancia = un atleta. Sin multitenencia, sin compartir, sin exportar a terceros.
@@ -23,6 +25,7 @@ y el estudio de viabilidad en `docs/Estudio_CRC_Strava_MCP.md`. Léelos antes de
 - `src/crc/sources/strava.ts`: único punto que convierte respuestas de Strava en `AlignedStreams` (streams nativos: `key_by_type=true`, `series_type=time`, sin `resolution`).
 - `src/crc/tools/`: wrappers MCP finos (validación Zod → source → analytics → `crcToolResponse`).
 - `src/crc/registerCrcTools.ts`: único punto de registro, llamado al final de `server.ts`.
+- `src/schemas/`: zona neutral compartida. Solo contratos genéricos (validación de IDs, booleanos flexibles), nunca analítica. No importa nada salvo Zod. La capa CRC la consume vía `mcpSchemas.ts`, no directamente. Para añadir algo aquí, las dos capas deben necesitarlo. Ver D11 en `docs/decisiones.md`.
 - Perfil: `~/.config/strava-mcp/crc-performance-profile.json`, escritura atómica (tmp + rename).
 
 ## Convenciones de cálculo (declarar siempre en `method`)
@@ -37,6 +40,19 @@ y el estudio de viabilidad en `docs/Estudio_CRC_Strava_MCP.md`. Léelos antes de
 - Tests primero para cada fórmula (Vitest, `tests/crc/`). Fixtures en `tests/crc/fixtures/`.
 - Antes de dar una tarea por terminada: `npm run build && npm test` en verde.
 - Si algo de la especificación es ambiguo, pregunta antes de decidir; si decides, documéntalo en `docs/decisiones.md`.
+
+### Checklist de cierre de sprint
+Además de build y tests en verde, comprobar las invariantes de arquitectura:
+- `src/schemas/` no importa nada salvo Zod:
+  `grep -rn "from \"" src/schemas/ | grep -v '"zod"'` → sin resultados.
+- Ninguna tool original importa de `src/crc/`:
+  `grep -rn "crc/" src/tools/` → sin resultados.
+- El snapshot de `tools/list` contra `dist/server.js` no ha cambiado en las
+  herramientas originales: `node scripts/snapshot-tools.mjs > despues.json` y
+  `node scripts/snapshot-tools.mjs --diff antes.json despues.json`
+  (capturar `antes.json` ANTES de empezar el sprint). Solo deben aparecer tools
+  CRC añadidas; ninguna original eliminada ni modificada salvo decisión
+  aprobada y documentada.
 
 ## Comandos
 - `npm run build` · `npm test` · `npm run dev` · `npx vitest run tests/crc`
