@@ -39,7 +39,7 @@ Afecta a: `check-strava-connection`, `disconnect-strava`, `get-athlete-profile`,
 que estas tools ignoran) y no cambia el contrato observable. Forzarlo de vuelta
 exigiría añadir `.strict()` a las 8, es decir, tocar sus esquemas.
 
-### D3. Techo de precisión en 7 tools originales (abierto)
+### D3. Techo de precisión en 7 tools originales ✅ *resuelto en [D5](#d5-d3-aplicado-como-ampliación-de-tipo-no-como-sustitución)*
 
 La regla del proyecto exige IDs como `string`, pero **7 herramientas originales
 declaran el ID como `z.number().int().positive()`** en su esquema MCP:
@@ -52,7 +52,10 @@ Con esos esquemas, un ID de más de 16 dígitos llega ya corrompido desde el
 Arreglarlo exige cambiar sus esquemas a `z.union([z.string(), z.number()])`, lo
 que este sprint prohíbe expresamente.
 
-**Decisión:** dejarlo documentado y pendiente de aprobación. La capa CRC no está
+**Decisión (actualizada en el Sprint 2):** aprobado y aplicado. Las 7 tools usan
+`stravaId` (`number | string` → siempre string); el detalle de la ampliación y su
+efecto en el JSON Schema está en [D5](#d5-d3-aplicado-como-ampliación-de-tipo-no-como-sustitución).
+La capa CRC no está
 afectada: usa `stravaId` de `src/crc/schemas/mcpSchemas.ts`, que transporta el ID
 como string y rechaza un `number` fuera del rango seguro en vez de devolverlo
 corrupto en silencio.
@@ -165,9 +168,11 @@ src/crc/    (CRC) ──────┘
 
 Contenido actual: `stravaId.ts` (`stravaId`, `flexibleBoolean`), ver [D6](#d6-stravaid-movido-a-srcschemasstravaidts).
 
-### D12 · Estimación de FTP desde el historial
+### D12 · Estimación de FTP desde el historial ✅ *implementada en el Sprint 5*
 
-**Alcance: Sprint 5. No implementado. Esta entrada solo deja registrada la decisión.**
+**Estado: IMPLEMENTADA en el Sprint 5** (`crc-estimate-ftp`, `analytics/bestEffort.ts`).
+El texto que sigue es la decisión tal y como se acordó; lo que cambió al
+implementarla está en D25-D29.
 
 **Contexto.** El producto va dirigido a cicloturistas, que muchas veces no conocen
 su FTP. El perfil CRC no puede depender de ninguna plataforma externa, así que el
@@ -220,11 +225,12 @@ temporal. Escribir **una sola** función reutilizable, del tipo
 `bestEffortInPeriod(duration_s, days)`, y que ambas la consuman. No duplicar la
 lógica de barrido.
 
-**Pendiente de decidir en el Sprint 5:**
+**Pendientes de D12, ya resueltos en el Sprint 5:**
 
-- Si al fijar un valor nuevo se cierra automáticamente la vigencia del anterior
-  (`effective_to` al día previo).
-- Si un FTP declarado sin fecha asume "desde hoy" en vez de rechazarse.
+- ✅ Cierre automático de la vigencia anterior → **sí, pero solo con
+  `close_previous: true`**. Ver [D26](#d26-el-cierre-de-la-vigencia-anterior-exige-confirmación-explícita-pendiente-de-d12-resuelto).
+- ✅ FTP declarado sin fecha asume "desde hoy" → **sí**. Ver
+  [D25](#d25-un-valor-sin-fecha-asume-desde-hoy-pendiente-de-d12-resuelto).
 
 ## Sprint 3 — Potencia (17/09/2026)
 
@@ -524,3 +530,51 @@ actividades ajenas.
 
 Los IDs repetidos se descartan antes de pedirlos: no aportan nada a una
 comparación y ahorran una llamada. El resto se apoya en la caché del Sprint 2.
+
+## Sprint 7 — QA y documentación (18/09/2026)
+
+### D36. Tres decisiones contradecían su propio estado
+
+Al repasar `decisiones.md` aparecieron tres entradas que sprints posteriores ya
+habían resuelto pero seguían marcadas como abiertas:
+
+- **D3** decía "(abierto)" y "pendiente de aprobación"; la aprobaste y se aplicó
+  en D5 (Sprint 2).
+- **D12** decía "No implementado"; el Sprint 5 la implementó entera.
+- Los dos pendientes de D12 seguían listados como "pendiente de decidir"; son
+  D25 y D26.
+
+Las tres se han actualizado con su estado real y un enlace a donde se
+resolvieron. Un registro de decisiones que miente sobre lo que está hecho es peor
+que no tenerlo: el siguiente que lo lea desconfiará de todo lo demás.
+
+### D37. El informe de aceptación declara dos incumplimientos parciales
+
+`docs/aceptacion-v0.1.md` recorre los diez criterios de la sección 14. Ocho se
+cumplen limpiamente; dos lo hacen con matices, y se dicen:
+
+- **Criterio 1** (las originales siguen funcionando): cumple, pero el SDK nuevo
+  cambió la serialización de `additionalProperties` en 8 tools sin parámetros, y
+  hay tres cambios deliberados en código original, todos retrocompatibles.
+- **Criterio 9** (JSON estable y versionado): el envoltorio está versionado y no
+  produce `NaN`/`Infinity`, pero **no se usa `structuredContent` con
+  `outputSchema`** (lo proponía la decisión 5 del estudio) y **no hay snapshot
+  del contrato de SALIDA**, solo del de entrada.
+
+Además se deja constancia de que los **golden tests cruzados contra
+Intervals.icu o WKO5 no se han hecho**: las fixtures son sintéticas y derivadas
+analíticamente, lo que demuestra que el código implementa el método declarado,
+pero no que ese método coincida con el de otras plataformas.
+
+### D38. `noNaN.test.ts` inspecciona el texto, no el objeto
+
+El criterio de que ninguna respuesta pública contenga `NaN` ni `Infinity` no se
+puede verificar sobre el objeto parseado: `JSON.parse` nunca devuelve `NaN`, así
+que ese test pasaría siempre sin probar nada. La única vía real de escape es un
+valor interpolado dentro de una cadena (`` `${valor}` ``), y eso solo se ve en el
+texto crudo.
+
+El test recorre las 12 tools CRC en cinco escenarios adversos —actividad entera a
+0 W (que produce 0/0 en el VI), actividad de 1 segundo, FC a 0, perfil vacío y
+una actividad sin más stream que el tiempo— y comprueba el texto devuelto. 62
+comprobaciones, todas en verde.

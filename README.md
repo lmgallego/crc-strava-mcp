@@ -28,7 +28,222 @@ añade una **capa analítica determinista (CRC)** sobre los datos de Strava.
   un atleta. Sin multitenencia, sin compartir entre usuarios y sin exportar a terceros. Al modelo
   solo se le devuelven métricas agregadas en JSON: las tools CRC nunca exponen streams crudos.
 
-Ver `CLAUDE.md` para las reglas de desarrollo y `docs/` para la especificación técnica.
+Documentación del fork:
+
+- `docs/aceptacion-v0.1.md` — verificación de los criterios de aceptación, con lo que cumple y lo que no.
+- `docs/decisiones.md` — todas las decisiones de diseño y por qué se tomaron.
+- `CLAUDE.md` — reglas de desarrollo del fork.
+- `docs/CRC_Strava_MCP_Especificacion_Tecnica_v0.1.docx` — especificación técnica.
+
+## Uso de la capa CRC
+
+Las herramientas CRC calculan métricas de entrenamiento de forma determinista en
+TypeScript. El modelo interpreta los resultados, pero no los calcula: todo lo que
+devuelven son números ya calculados, con su método declarado.
+
+> Todas las respuestas CRC son JSON con la forma
+> `{ tool, version, activity_id, available, inputs, method, metrics, quality, errors }`.
+> El bloque `method` dice cómo se calculó cada cosa, y `quality`, hasta qué punto
+> es fiable.
+
+### 1. Configura tu perfil primero
+
+Casi todo depende del FTP y del peso. Sin ellos las herramientas siguen
+funcionando, pero omiten lo que no puede calcularse (IF, TSS, W/kg).
+
+```
+Guarda mi FTP: 250 W desde el 1 de enero de 2026
+Guarda mi peso: 72 kg desde el 1 de enero de 2026
+Guarda mi FC máxima: 190 ppm
+```
+
+Eso invoca `crc-set-performance-profile`. Cuatro detalles que importan:
+
+- **El perfil es histórico.** Cada valor tiene su ventana `effective_from` /
+  `effective_to`. Una actividad de marzo usa el FTP que tenías en marzo, no el de
+  hoy. Si no hay valor vigente para esa fecha se devuelve `missing_parameter`:
+  nunca se usa el actual por defecto.
+- **Si omites la fecha, se asume hoy.**
+- **El histórico no se pisa.** Cambiar un valor ya guardado exige
+  `overwrite: true`; cerrar la vigencia del anterior al añadir uno nuevo exige
+  `close_previous: true`.
+- **AeT y MAP solo existen si los introduces tú**, con su fuente. Nunca se
+  deducen de Strava.
+
+El perfil vive en `~/.config/strava-mcp/crc-performance-profile.json`, con
+escritura atómica.
+
+### 2. Si no conoces tu FTP
+
+```
+No sé cuál es mi FTP, ¿puedes estimarlo?
+```
+
+`crc-estimate-ftp` busca tu mejor esfuerzo de 20 min de los últimos 90 días y
+propone ese valor × 0,95.
+
+**No guarda nada.** Devuelve la propuesta, de qué actividad y fecha sale, y un
+bloque `to_persist` con la llamada exacta para guardarla si te convence. Guardar
+es siempre una segunda decisión tuya, y el valor queda marcado con
+`source: "estimated_20min"` para que todo lo que se derive de él lo refleje.
+
+### 3. Analiza una actividad
+
+```
+Analiza mi última salida en bici
+Dame las métricas de potencia de la actividad 1234567890
+```
+
+`crc-analyze-cycling-activity` compone todo aquello para lo que haya datos:
+
+| Módulo | Qué devuelve | Necesita |
+|---|---|---|
+| `activity_details` | Nombre, distancia, desnivel, tipo | — |
+| `power_metrics` | Media, NP, VI, IF, TSS, kJ, W/kg | Potencia (IF y TSS, además FTP) |
+| `heartrate_summary` | Media, máx y mín de FC | FC |
+| `cadence_summary` | Media, máx y mín de cadencia | Cadencia |
+| `power_zones` | Tiempo en las 7 zonas de Coggan | Potencia + FTP |
+| `heartrate_zones` | Tiempo en zonas de FC | FC + FC máxima |
+| `decoupling` | Desacople aeróbico | Potencia + FC |
+
+**Cada módulo puede fallar sin invalidar el resto.** Si sales sin pulsómetro
+sigues teniendo toda la potencia; si no tienes FTP configurado sigues teniendo
+NP, VI, media y kJ, y solo faltan IF y TSS.
+
+### 4. Herramientas sueltas
+
+```
+¿Cuál es mi mejor potencia de 5 minutos en esa actividad?   → crc-power-curve
+¿Cuánto tiempo pasé en zona 4?                              → crc-time-in-zones
+¿Cuánto me desacoplé en la salida larga del domingo?        → crc-aerobic-decoupling
+¿A qué cadencia genero más torque?                          → crc-torque-cadence
+¿Cuánto trabajo hice por encima del umbral?                 → crc-work-above-ftp
+Estima mi VO2max                                            → crc-estimate-vo2max
+Compara mis tres últimas salidas largas                     → crc-compare-activities
+```
+
+`crc-compare-activities` acepta de 2 a 10 actividades y usa, en cada una, los
+parámetros vigentes **en su fecha**. Distingue un cero legítimo
+(`status: "ok"`, `value: 0`) de un dato que falta (`status: "missing_data"`).
+
+### Lo que te dirá sin que lo preguntes
+
+- **Si la potencia es estimada** en lugar de medida. Con potencia estimada no se
+  calculan curva de potencia ni VO2max: no serían fiables.
+- **Si hay huecos** en la grabación. Las ventanas móviles no los cruzan.
+- **Si el FTP usado es una estimación**, porque IF y TSS heredan esa
+  incertidumbre.
+- **Si un esfuerzo pudo no ser máximo**, cosa que cambia cómo se lee el VO2max.
+
+## Qué NO hace la v0.1
+
+Deliberadamente fuera de alcance hasta validar la exactitud de esta capa:
+
+- **Detección automática de intervalos** y detección de subidas.
+- **Durabilidad** (cómo cae tu potencia tras N kJ acumulados).
+- **Análisis longitudinal** y carga de entrenamiento: nada de CTL, ATL ni TSB.
+- **Modelos CP / W′**.
+- **Generación de informes**.
+
+Tampoco infiere AeT ni MAP: o los configuras tú con su fuente, o no existen.
+
+Dos límites más que conviene conocer:
+
+- Las fórmulas están validadas contra fixtures sintéticas derivadas
+  analíticamente, **no contra Intervals.icu ni WKO5**. Implementan el método que
+  declaran; no se ha comprobado que coincidan con los de otras plataformas.
+- El VO2max usa un modelo publicado sobre una muestra de 46 ciclistas varones.
+  Extrapolarlo a otros perfiles es una limitación conocida, y la respuesta lo
+  advierte en `quality.model_limitations`.
+
+## Instalación como servidor MCP
+
+Este fork **no está publicado en npm**: se instala desde el código fuente.
+
+```bash
+git clone <url-de-tu-fork> crc-strava-mcp
+cd crc-strava-mcp
+npm install
+npm run build        # imprescindible: los clientes cargan dist/, no src/
+```
+
+> **Recompila tras cada `git pull`.** Los clientes MCP ejecutan `dist/server.js`,
+> así que un cambio en `src/` que no se compile sencillamente no existe para
+> ellos.
+
+### Claude Desktop
+
+Edita el archivo de configuración:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "crc-strava": {
+      "command": "node",
+      "args": ["/ruta/absoluta/a/crc-strava-mcp/dist/server.js"],
+      "env": {
+        "STRAVA_CLIENT_ID": "tu_client_id",
+        "STRAVA_CLIENT_SECRET": "tu_client_secret"
+      }
+    }
+  }
+}
+```
+
+La ruta debe ser **absoluta**. En Windows, usa barras normales
+(`C:/Users/tu-usuario/...`) o escapa las invertidas.
+
+Después reinicia Claude Desktop del todo: cerrar la ventana no basta, hay que
+salir desde la bandeja del sistema o el Dock.
+
+### Codex CLI
+
+Añade el servidor a `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.crc-strava]
+command = "node"
+args = ["/ruta/absoluta/a/crc-strava-mcp/dist/server.js"]
+
+[mcp_servers.crc-strava.env]
+STRAVA_CLIENT_ID = "tu_client_id"
+STRAVA_CLIENT_SECRET = "tu_client_secret"
+```
+
+### Claude Code
+
+```bash
+claude mcp add crc-strava -- node /ruta/absoluta/a/crc-strava-mcp/dist/server.js
+```
+
+### Credenciales y primera conexión
+
+Las credenciales también pueden vivir en `~/.config/strava-mcp/config.json`, que
+es donde las deja el asistente de autenticación:
+
+```bash
+npm run setup-auth
+```
+
+Con eso configurado, pide en el chat *"conecta mi cuenta de Strava"*
+(`connect-strava`) y sigue el enlace. Comprueba el estado con *"¿estoy conectado
+a Strava?"* (`check-strava-connection`).
+
+**Una instancia = un atleta.** El servidor está pensado para tu propia cuenta: no
+hay multiusuario, y `crc-compare-activities` rechaza cualquier actividad que no
+sea tuya.
+
+### Comprobar que funciona
+
+```bash
+npm run build && npm test           # 459 tests
+node scripts/snapshot-tools.mjs     # debe listar 38 herramientas
+```
+
 
 ## What Can You Do With This?
 
