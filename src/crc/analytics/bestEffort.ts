@@ -1,0 +1,228 @@
+/**
+ * Mejor esfuerzo sostenido de una duración dada dentro de una ventana temporal.
+ *
+ * Núcleo compartido por `crc-estimate-vo2max` (mejor 5 min) y `crc-estimate-ftp`
+ * (mejor 20 min): una sola implementación del barrido, no dos.
+ *
+ * Sigue sin depender de Strava ni de MCP: los datos entran por los proveedores
+ * de `BestEffortProviders`, que inyecta quien la llama. Así la capa de fuente
+ * puede cambiar (Intervals.icu, archivos FIT) sin tocar este módulo.
+ */
+import type { AlignedStreams } from "../streams/alignedStreams.js";
+import { computePowerCurve } from "./powerCurve.js";
+
+/** Ventana por defecto del barrido, en días. */
+export const DEFAULT_WINDOW_DAYS = 90;
+
+/** Tope por defecto de actividades a descargar. Barrer cuesta llamadas a la API. */
+export const DEFAULT_MAX_ACTIVITIES = 30;
+
+export interface ActivityRef {
+    activity_id: string;
+    /** Fecha de inicio en ISO. */
+    start_date: string;
+    /** `true` = medidor real. Solo se analizan estas. */
+    device_watts: boolean | null;
+}
+
+export interface EffortStreams {
+    activity_id: string;
+    start_date: string | null;
+    device_watts: boolean | null;
+    aligned: AlignedStreams;
+}
+
+export interface BestEffortProviders {
+    /** Actividades del periodo, de más reciente a más antigua. */
+    listActivities: (fromIso: string, toIso: string, max: number) => Promise<ActivityRef[]>;
+    /** Streams alineados de una actividad. DEBE usar la caché de disco. */
+    loadStreams: (activityId: string) => Promise<EffortStreams>;
+}
+
+export interface BestEffortOptions {
+    /** Ventana hacia atrás, en días. Por defecto 90. */
+    days?: number;
+    /** Tope de actividades a descargar. Por defecto 30. */
+    maxActivities?: number;
+    /** Momento de referencia. Inyectable para que los tests sean deterministas. */
+    now?: Date;
+    providers: BestEffortProviders;
+}
+
+export interface BestEffort {
+    power_w: number;
+    activity_id: string;
+    /** Fecha de la actividad que contiene el esfuerzo (ISO). */
+    activity_date: string;
+    /** Inicio del esfuerzo dentro de la actividad, en segundos. */
+    start_time_s: number;
+    end_time_s: number;
+}
+
+export interface SkippedActivity {
+    activity_id: string;
+    reason: string;
+}
+
+export interface BestEffortResult {
+    available: boolean;
+    duration_s: number;
+    best: BestEffort | null;
+    window: { from: string; to: string; days: number };
+    /** Actividades cuyos streams se llegaron a analizar. */
+    analysed_activities: number;
+    /** Actividades listadas en la ventana (antes de descartar). */
+    listed_activities: number;
+    skipped: SkippedActivity[];
+    method: Record<string, string>;
+    warnings: string[];
+    reason: string | null;
+}
+
+const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+
+/**
+ * Recorre las actividades de la ventana y devuelve el mejor esfuerzo sostenido
+ * de `durationS` segundos.
+ *
+ * - Solo se analizan actividades con `device_watts === true`: con potencia
+ *   estimada no se estima ni FTP ni VO2max.
+ * - El mejor esfuerzo de cada actividad se calcula con `computePowerCurve`, que
+ *   ya descarta las ventanas que cruzan tramos no válidos.
+ * - Una actividad que falle al descargarse no rompe el barrido: se anota en
+ *   `skipped` y se sigue.
+ */
+export async function bestEffortInPeriod(
+    durationS: number,
+    days: number = DEFAULT_WINDOW_DAYS,
+    options: BestEffortOptions,
+): Promise<BestEffortResult> {
+    if (!Number.isFinite(durationS) || durationS <= 0) {
+        throw new Error(`duration_s debe ser > 0 (recibido: ${durationS}).`);
+    }
+    if (!Number.isFinite(days) || days <= 0) {
+        throw new Error(`days debe ser > 0 (recibido: ${days}).`);
+    }
+
+    const maxActivities = options.maxActivities ?? DEFAULT_MAX_ACTIVITIES;
+    const now = options.now ?? new Date();
+    const from = new Date(now.getTime() - days * 24 * 3600 * 1000);
+
+    const window = { from: isoDay(from), to: isoDay(now), days };
+
+    const method: Record<string, string> = {
+        search:
+            `Mejor media sostenida de ${durationS} s entre las actividades de los últimos ` +
+            `${days} días, con un tope de ${maxActivities} actividades.`,
+        windows:
+            "Las ventanas móviles no cruzan tramos no válidos (misma regla que la power curve).",
+        power_source:
+            "Solo se analizan actividades con device_watts = true: la potencia estimada no sirve.",
+        cache: "Los streams se leen de la caché de disco cuando están disponibles.",
+    };
+
+    const warnings: string[] = [];
+    const skipped: SkippedActivity[] = [];
+
+    const listed = await options.providers.listActivities(window.from, window.to, maxActivities);
+    if (listed.length >= maxActivities) {
+        warnings.push(
+            `Se alcanzó el tope de ${maxActivities} actividades: puede haber esfuerzos mejores sin analizar.`,
+        );
+    }
+
+    let best: BestEffort | null = null;
+    let analysed = 0;
+
+    for (const ref of listed) {
+        if (ref.device_watts !== true) {
+            skipped.push({
+                activity_id: ref.activity_id,
+                reason:
+                    ref.device_watts === false
+                        ? "Potencia estimada (device_watts=false)."
+                        : "No se sabe si la potencia es medida (device_watts desconocido).",
+            });
+            continue;
+        }
+
+        let streams: EffortStreams;
+        try {
+            streams = await options.providers.loadStreams(ref.activity_id);
+        } catch (err) {
+            // Una actividad que falle no debe tumbar el barrido entero.
+            skipped.push({
+                activity_id: ref.activity_id,
+                reason: `No se pudieron obtener los streams: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            });
+            continue;
+        }
+
+        if (streams.device_watts !== true) {
+            skipped.push({
+                activity_id: ref.activity_id,
+                reason: "Potencia no medida según los datos de la actividad.",
+            });
+            continue;
+        }
+        if (!streams.aligned.watts) {
+            skipped.push({ activity_id: ref.activity_id, reason: "Sin stream de potencia." });
+            continue;
+        }
+
+        analysed++;
+
+        const curve = computePowerCurve(streams.aligned, { durations: [durationS] });
+        const entry = curve.entries[durationS];
+        if (!entry || !entry.available || entry.best_power_w === null) {
+            skipped.push({
+                activity_id: ref.activity_id,
+                reason: `Sin ninguna ventana válida de ${durationS} s.`,
+            });
+            continue;
+        }
+
+        if (best === null || entry.best_power_w > best.power_w) {
+            best = {
+                power_w: entry.best_power_w,
+                activity_id: ref.activity_id,
+                activity_date: streams.start_date ?? ref.start_date,
+                start_time_s: entry.start_time_s ?? 0,
+                end_time_s: entry.end_time_s ?? 0,
+            };
+        }
+    }
+
+    if (best === null) {
+        return {
+            available: false,
+            duration_s: durationS,
+            best: null,
+            window,
+            analysed_activities: analysed,
+            listed_activities: listed.length,
+            skipped,
+            method,
+            warnings,
+            reason:
+                listed.length === 0
+                    ? `No hay actividades en los últimos ${days} días.`
+                    : `Ninguna actividad del periodo tiene un esfuerzo válido de ${durationS} s con potencia medida.`,
+        };
+    }
+
+    return {
+        available: true,
+        duration_s: durationS,
+        best,
+        window,
+        analysed_activities: analysed,
+        listed_activities: listed.length,
+        skipped,
+        method,
+        warnings,
+        reason: null,
+    };
+}

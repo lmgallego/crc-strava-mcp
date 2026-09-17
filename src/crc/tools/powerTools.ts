@@ -9,6 +9,7 @@ import { z } from "zod";
 import { computePowerCurve, DEFAULT_DURATIONS_S } from "../analytics/powerCurve.js";
 import { computePowerMetrics } from "../analytics/powerMetrics.js";
 import { resolveMetric } from "../profile/profileResolver.js";
+import { describeProvenance } from "../profile/provenance.js";
 import { loadProfile } from "../profile/profileStore.js";
 import { fetchActivityStreams, type ActivityStreams } from "../sources/strava.js";
 import {
@@ -105,7 +106,19 @@ async function resolveParams(
         });
     }
 
-    return { ftp, weight, errors, warnings, sources };
+    // Un FTP estimado contamina IF y TSS: hay que decirlo (D12).
+    const ftpProv = describeProvenance("FTP", sources["ftp_w"]);
+    const weightProv = describeProvenance("peso", sources["weight_kg"]);
+    warnings.push(...ftpProv.warnings, ...weightProv.warnings);
+
+    return {
+        ftp,
+        weight,
+        errors,
+        warnings,
+        sources,
+        estimated: { ftp_w: ftpProv.estimated, weight_kg: weightProv.estimated },
+    };
 }
 
 // --- crc-calculate-power-metrics -----------------------------------------
@@ -168,6 +181,8 @@ export const powerMetricsTool = {
                     quality: {
                         ...quality,
                         np_windows: m.np_windows,
+                        ftp_estimated: p.estimated.ftp_w,
+                        weight_estimated: p.estimated.weight_kg,
                         warnings: [...quality.warnings, ...p.warnings],
                     },
                     errors: p.errors,
@@ -262,6 +277,7 @@ export const powerCurveTool = {
                     metrics: { power_curve: curve.entries },
                     quality: {
                         ...quality,
+                        weight_estimated: p.estimated.weight_kg,
                         warnings: [
                             ...quality.warnings,
                             ...p.warnings.filter((w) => !w.includes("ftp_w")),

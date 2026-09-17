@@ -346,3 +346,80 @@ esfuerzo continuo que quizá no existió.
   zonas ABSOLUTAS y torque/cadencia funcionan igual, sin reportar el error.
 - `crc-torque-cadence` no necesita FTP ni peso.
 - `crc-aerobic-decoupling` solo pide FTP si se usan filtros relativos a él.
+
+## Sprint 5 — VO2max y estimación de FTP (17/09/2026)
+
+D12 deja de ser documentación: queda implementada.
+
+### D25. Un valor sin fecha asume "desde hoy" *(pendiente de D12, resuelto)*
+
+`effective_from` pasa a opcional y por defecto toma el día actual. Es lo que
+quiere decir alguien que declara su FTP sin más, y rechazarlo solo añadía
+fricción a la ruta principal del producto (un cicloturista que por fin sabe su
+FTP y lo dice).
+
+Cambia el contrato de `crc-set-performance-profile`, que es una tool CRC propia,
+no una de las 26 originales: `effective_from` sale de `required`. Es una
+ampliación retrocompatible, ninguna llamada que funcionara antes deja de hacerlo.
+
+### D26. El cierre de la vigencia anterior exige confirmación explícita *(pendiente de D12, resuelto)*
+
+`close_previous: true` pone `effective_to` de la ventana abierta anterior al día
+previo al nuevo `effective_from`. **No es el comportamiento por defecto**: MODIFICA
+una entrada del histórico que el usuario ya había guardado, y eso no se hace sin
+que lo pida.
+
+Sin la opción, añadir un FTP nuevo sobre una ventana abierta falla por solape,
+que es exactamente el aviso correcto: obliga a decidir qué pasa con el valor
+anterior en vez de resolverlo en silencio.
+
+Detalle: solo se cierra la ventana ABIERTA más reciente anterior a la nueva. Las
+ventanas ya cerradas del histórico no se tocan.
+
+### D27. `bestEffortInPeriod` vive en `analytics/` con proveedores inyectados
+
+El barrido necesita datos de Strava, pero CLAUDE.md exige que `analytics/` no
+dependa de la fuente. Se resuelve inyectando `BestEffortProviders`
+(`listActivities` y `loadStreams`): el módulo no importa nada de `sources/` y
+`sources/strava.ts` aporta el adaptador `stravaBestEffortProviders()`.
+
+Un único barrido compartido por `crc-estimate-vo2max` (5 min) y
+`crc-estimate-ftp` (20 min), como exigía la nota de D12. Además:
+
+- Las actividades no elegibles (`device_watts !== true`) se descartan ANTES de
+  descargar sus streams: filtrar por metadatos no cuesta llamadas a la API.
+- Una actividad que falle al descargarse se anota en `skipped` y el barrido
+  sigue; un 503 puntual no tumba la estimación entera.
+
+### D28. `model_reference` sin PMID inventado
+
+El estudio de viabilidad pide confirmar en PubMed el artículo del modelo
+(atribuido a Sitko et al.) antes de fijarlo. **No se ha verificado en este
+sprint**, así que `model_reference` describe el modelo y declara
+`reference_verified: false` en lugar de citar un PMID sin comprobar. Una cita
+inventada es peor que ninguna: pasa por verificada.
+
+Pendiente: confirmar autores y PMID, y actualizar `VO2MAX_MODEL.reference`.
+
+### D29. La procedencia estimada viaja en `quality`
+
+`describeProvenance` marca `ftp_estimated` / `reference_estimated` y añade un
+warning explícito en el bloque `quality` de toda tool que use un parámetro con
+`source: "estimated_20min"`. Afecta a `crc-calculate-power-metrics` (IF y TSS),
+`crc-time-in-zones` (zonas relativas), `crc-work-above-ftp` y
+`crc-aerobic-decoupling` (filtros relativos).
+
+Las métricas se siguen calculando: la incertidumbre se declara, no se oculta
+devolviendo `null`.
+
+### D30. Fixture 09-periodo con dos trampas deliberadas
+
+El mejor 5 min (320 W, actividad 1001) y el mejor 20 min (265 W, actividad 1002)
+están en actividades DISTINTAS, para que un barrido que devolviera siempre la
+misma no pasara los tests. Además:
+
+- `1003` tiene el pico más alto de 5 min (400 W) pero `device_watts: false`.
+- `1004` tiene 450 W en 20 min pero cae fuera de la ventana de 90 días.
+
+Si el resultado es una de esas dos, el filtro que falla es el de potencia medida
+o el temporal, respectivamente.

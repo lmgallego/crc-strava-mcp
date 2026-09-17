@@ -241,3 +241,80 @@ describe("profileResolver", () => {
         expect(() => toIsoDay("ayer")).toThrow(/Fecha inválida/);
     });
 });
+
+describe("profileStore · D25 fecha por defecto", () => {
+    it("sin effective_from asume hoy", async () => {
+        const hoy = new Date().toISOString().slice(0, 10);
+        const p = await setMetric(
+            { metric: "ftp_w", value: 250, unit: "W", source: "manual" },
+            { file },
+        );
+
+        expect(p.metrics[0]!.effective_from).toBe(hoy);
+    });
+
+    it("una fecha explícita sigue mandando", async () => {
+        const p = await setMetric(ftp(250, "2026-03-01"), { file });
+        expect(p.metrics[0]!.effective_from).toBe("2026-03-01");
+    });
+});
+
+describe("profileStore · D26 cierre de la vigencia anterior", () => {
+    it("sin closePrevious, añadir un valor nuevo falla por solape", async () => {
+        await setMetric(ftp(300, "2026-01-01"), { file });
+        await expect(setMetric(ftp(320, "2026-06-01"), { file })).rejects.toThrow(/solapad/i);
+    });
+
+    it("con closePrevious cierra la anterior al día previo", async () => {
+        await setMetric(ftp(300, "2026-01-01"), { file });
+        const p = await setMetric(ftp(320, "2026-06-01"), { file, closePrevious: true });
+
+        const previa = p.metrics.find((m) => m.effective_from === "2026-01-01")!;
+        const nueva = p.metrics.find((m) => m.effective_from === "2026-06-01")!;
+
+        expect(previa.effective_to).toBe("2026-05-31");
+        expect(nueva.effective_to).toBeNull();
+        expect(p.metrics).toHaveLength(2);
+    });
+
+    it("el histórico queda consultable en ambas fechas", async () => {
+        await setMetric(ftp(300, "2026-01-01"), { file });
+        const p = await setMetric(ftp(320, "2026-06-01"), { file, closePrevious: true });
+
+        expect(resolveMetric(p, "ftp_w", "2026-03-15")).toMatchObject({ value: 300 });
+        expect(resolveMetric(p, "ftp_w", "2026-07-15")).toMatchObject({ value: 320 });
+    });
+
+    it("cierra solo la ventana abierta más reciente, no todo el histórico", async () => {
+        await setMetric(ftp(280, "2025-01-01", "2025-12-31"), { file });
+        await setMetric(ftp(300, "2026-01-01"), { file });
+        const p = await setMetric(ftp(320, "2026-06-01"), { file, closePrevious: true });
+
+        expect(p.metrics.find((m) => m.effective_from === "2025-01-01")!.effective_to).toBe(
+            "2025-12-31",
+        );
+        expect(p.metrics.find((m) => m.effective_from === "2026-01-01")!.effective_to).toBe(
+            "2026-05-31",
+        );
+    });
+
+    it("no toca métricas distintas", async () => {
+        await setMetric(
+            { metric: "weight_kg", value: 72, unit: "kg", effective_from: "2026-01-01" },
+            { file },
+        );
+        await setMetric(ftp(300, "2026-01-01"), { file });
+        const p = await setMetric(ftp(320, "2026-06-01"), { file, closePrevious: true });
+
+        expect(p.metrics.find((m) => m.metric === "weight_kg")!.effective_to).toBeNull();
+    });
+
+    it("cruza el cambio de mes y de año correctamente", async () => {
+        await setMetric(ftp(300, "2025-06-01"), { file });
+        const p = await setMetric(ftp(320, "2026-01-01"), { file, closePrevious: true });
+
+        expect(p.metrics.find((m) => m.effective_from === "2025-06-01")!.effective_to).toBe(
+            "2025-12-31",
+        );
+    });
+});

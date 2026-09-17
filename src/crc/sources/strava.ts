@@ -291,3 +291,66 @@ export async function clearStreamCache(activityId?: string): Promise<number> {
 export function streamCacheDir(): string {
     return CACHE_DIR;
 }
+
+// --- Barrido temporal -----------------------------------------------------
+
+/**
+ * Actividades del atleta autenticado en una ventana de fechas.
+ *
+ * Adaptador para `bestEffortInPeriod`: éste no conoce Strava, solo consume los
+ * proveedores que se le inyectan.
+ */
+export async function listActivitiesInPeriod(
+    fromIso: string,
+    toIso: string,
+    max: number,
+    options: { accessToken?: string } = {},
+): Promise<{ activity_id: string; start_date: string; device_watts: boolean | null }[]> {
+    const token = options.accessToken ?? process.env.STRAVA_ACCESS_TOKEN;
+    if (!token) throw new Error("Falta STRAVA_ACCESS_TOKEN para acceder a Strava.");
+
+    const after = Math.floor(new Date(`${fromIso}T00:00:00Z`).getTime() / 1000);
+    const before = Math.floor(new Date(`${toIso}T23:59:59Z`).getTime() / 1000);
+
+    const res = await stravaApi.get<
+        { id?: number | string; start_date?: string; device_watts?: boolean }[]
+    >("athlete/activities", {
+        headers: { Authorization: `Bearer ${token}` },
+        // per_page acotado por `max`: barrer cuesta llamadas a la API.
+        params: { after, before, per_page: Math.min(max, 200), page: 1 },
+    });
+
+    const list = Array.isArray(res.data) ? res.data : [];
+    return list
+        .filter((a) => a.id != null)
+        .slice(0, max)
+        .map((a) => ({
+            // El ID viaja como string: nunca pasa por Number.
+            activity_id: String(a.id),
+            start_date: a.start_date ?? "",
+            device_watts: a.device_watts ?? null,
+        }));
+}
+
+/**
+ * Proveedores listos para `bestEffortInPeriod`.
+ * `loadStreams` usa la caché de disco, como exige D12.
+ */
+export function stravaBestEffortProviders(options: { accessToken?: string } = {}) {
+    return {
+        listActivities: (fromIso: string, toIso: string, max: number) =>
+            listActivitiesInPeriod(fromIso, toIso, max, options),
+        loadStreams: async (activityId: string) => {
+            const r = await fetchActivityStreams(activityId, DEFAULT_STREAM_TYPES, {
+                ...options,
+                useCache: true,
+            });
+            return {
+                activity_id: r.activity_id,
+                start_date: r.start_date,
+                device_watts: r.device_watts,
+                aligned: r.aligned,
+            };
+        },
+    };
+}

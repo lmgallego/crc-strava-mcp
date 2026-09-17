@@ -4,6 +4,7 @@ import {
     getPerformanceProfileTool,
     setPerformanceProfileTool,
 } from "./tools/performanceProfileTools.js";
+import { estimateFtpTool, estimateVo2maxTool } from "./tools/estimateTools.js";
 import {
     decouplingTool,
     timeInZonesTool,
@@ -29,6 +30,8 @@ export function registerCrcTools(server: McpServer): void {
         timeInZonesTool,
         torqueCadenceTool,
         workAboveFtpTool,
+        estimateVo2maxTool,
+        estimateFtpTool,
     ];
     for (const tool of tools) {
         server.tool(tool.name, tool.description, tool.inputSchema.shape, tool.execute as never);

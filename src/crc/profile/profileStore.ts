@@ -45,7 +45,9 @@ export const metricEntrySchema = z
         metric: z.enum(METRIC_NAMES as [MetricName, ...MetricName[]]),
         value: z.number().finite(),
         unit: z.string(),
-        effective_from: isoDate,
+        // Sin fecha se asume "desde hoy" (D25): es lo que quiere decir alguien
+        // que declara su FTP sin más, y rechazarlo solo añade fricción.
+        effective_from: isoDate.optional().default(() => todayIso()),
         effective_to: isoDate.nullable().optional().default(null),
         source: z.string().min(1).default("manual"),
     })
@@ -170,9 +172,29 @@ export async function saveProfile(
     await fs.rename(tmp, file);
 }
 
+/** Día de hoy en formato YYYY-MM-DD (UTC). */
+export function todayIso(): string {
+    return new Date().toISOString().slice(0, 10);
+}
+
+/** Día anterior a `day`, en YYYY-MM-DD. */
+export function previousDay(day: string): string {
+    const d = new Date(`${day}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+}
+
 export interface SetMetricOptions {
     /** Permite reemplazar una entrada ya existente con el mismo effective_from. */
     overwrite?: boolean;
+    /**
+     * Cierra la vigencia de la entrada abierta anterior de esa misma métrica,
+     * poniéndole `effective_to` al día previo al nuevo `effective_from`.
+     *
+     * Exige confirmación explícita (D26) porque MODIFICA el histórico: sin esto,
+     * añadir un FTP nuevo fallaría por solape, que es el aviso correcto.
+     */
+    closePrevious?: boolean;
     file?: string;
 }
 
@@ -211,6 +233,26 @@ export async function setMetric(
     const metrics = [...profile.metrics];
     if (idx >= 0) metrics[idx] = next;
     else metrics.push(next);
+
+    // Cierre de la vigencia anterior (D26). Solo con confirmación explícita:
+    // modifica una entrada del histórico que el usuario ya había guardado.
+    if (options.closePrevious) {
+        let closedAt = -1;
+        for (let i = 0; i < metrics.length; i++) {
+            const m = metrics[i]!;
+            if (m === next) continue;
+            if (m.metric !== next.metric) continue;
+            // Solo la ventana abierta que empieza antes que la nueva.
+            if (m.effective_to != null) continue;
+            if (m.effective_from >= next.effective_from) continue;
+            if (closedAt >= 0 && metrics[closedAt]!.effective_from > m.effective_from) continue;
+            closedAt = i;
+        }
+        if (closedAt >= 0) {
+            const prev = metrics[closedAt]!;
+            metrics[closedAt] = { ...prev, effective_to: previousDay(next.effective_from) };
+        }
+    }
 
     // Valida el solape ANTES de tocar el disco.
     assertNoOverlap(metrics);

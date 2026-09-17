@@ -114,7 +114,10 @@ export const setPerformanceProfileInput = {
         ),
     effective_from: z
         .string()
-        .describe("Inicio de la vigencia (YYYY-MM-DD). Obligatorio: el perfil es histórico."),
+        .optional()
+        .describe(
+            "Inicio de la vigencia (YYYY-MM-DD). Si se omite se asume HOY (D25).",
+        ),
     effective_to: z
         .string()
         .nullable()
@@ -130,6 +133,13 @@ export const setPerformanceProfileInput = {
             "true para reemplazar una entrada existente con el mismo effective_from. " +
                 "Sin esto, el histórico no se pisa.",
         ),
+    close_previous: flexibleBoolean
+        .optional()
+        .describe(
+            "true cierra la vigencia del valor anterior poniéndole effective_to al día previo. " +
+                "Requiere confirmación explícita porque MODIFICA el histórico (D26). Sin esto, " +
+                "añadir un valor nuevo sobre una ventana abierta falla por solape.",
+        ),
 };
 
 export const setPerformanceProfileTool = {
@@ -143,10 +153,11 @@ export const setPerformanceProfileTool = {
         metric: MetricName;
         value: number;
         unit?: string;
-        effective_from: string;
+        effective_from?: string;
         effective_to?: string | null;
         source?: string;
         overwrite?: boolean;
+        close_previous?: boolean;
     }) => {
         try {
             const updated = await setMetric(
@@ -154,11 +165,11 @@ export const setPerformanceProfileTool = {
                     metric: args.metric,
                     value: args.value,
                     unit: args.unit ?? METRIC_SPECS[args.metric].unit,
-                    effective_from: args.effective_from,
+                    ...(args.effective_from ? { effective_from: args.effective_from } : {}),
                     effective_to: args.effective_to ?? null,
                     source: args.source ?? "manual",
                 },
-                { overwrite: args.overwrite },
+                { overwrite: args.overwrite, closePrevious: args.close_previous },
             );
 
             return json(
@@ -168,9 +179,10 @@ export const setPerformanceProfileTool = {
                     inputs: {
                         metric: args.metric,
                         value: args.value,
-                        effective_from: args.effective_from,
+                        effective_from: args.effective_from ?? null,
                         effective_to: args.effective_to ?? null,
                         overwrite: args.overwrite ?? false,
+                        close_previous: args.close_previous ?? false,
                     },
                     method: { write: "escritura atómica (archivo temporal + rename)" },
                     metrics: {

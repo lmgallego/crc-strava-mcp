@@ -13,6 +13,7 @@ ninguna plataforma externa.
 | 05-descenso-ceros | 10 min de descenso a 0 W. Los ceros son dato real: entran en la media (166 W) y no deben tratarse como ausencia. |
 | 06-desacople-deriva | 60 min a 200 W con la FC subiendo linealmente de 135 a 145 bpm. Caso base del desacople: la potencia no cambia, asi que todo el efecto viene de la deriva cardiaca. Desacople 3.5097 %. |
 | 07-desacople-hueco | Hueco asimetrico de 10 min. La mitad por tiempo valido cae en un punto distinto que la mitad por indice de rejilla: por tiempo valido da 6.6667 %, por indice daria 5.7692 %. El expected guarda ambos y el test comprueba que sale el primero. |
+| 09-periodo | Cuatro actividades con fechas distintas para el barrido temporal (bestEffortInPeriod). El mejor 5 min (320 W, act. 1001) y el mejor 20 min (265 W, act. 1002) estan en actividades DISTINTAS a proposito. Incluye dos trampas: 1003 tiene el pico mas alto (400 W) pero potencia estimada, y 1004 tiene 450 W pero cae fuera de la ventana de 90 dias. |
 | 08-desacople-filtros | Calentamiento de 10 min, tramo por debajo del rango de potencia y tramo parado. Valida que warmup_exclusion_min, moving_only y power_min/max_pct_ftp se aplican ANTES de partir en mitades. Quedan 3600 s utiles y el desacople es 6.6667 %. |
 
 ## Metodo declarado
@@ -33,7 +34,18 @@ Metodo declarado para el desacople:
 - decoupling_pct = (EF1 - EF2) / EF1 * 100.
 - Los filtros se aplican ANTES de partir en mitades.
 
+## Barrido temporal (09)
+
+Referencia temporal fija: `now = 2026-09-17`, asi que la ventana de 90 dias
+empieza el 2026-06-19. El expected incluye `per_activity` con el mejor esfuerzo
+de 300 s y 1200 s de cada actividad, y los valores derivados de VO2max
+(16.6 + 8.87 * W/kg) y FTP (mejor 20 min * 0.95).
+
+Si el resultado del barrido es 1003 o 1004, el filtro que falla es,
+respectivamente, el de `device_watts` o el de la ventana temporal.
+
 ## Generadores
 `generador-fixtures.py` reproduce los casos 01-05 y sus valores esperados.
 `generador-fixtures-desacople.py` reproduce los casos 06-08.
+`generador-fixtures-periodo.py` reproduce el caso 09.
 Si se cambia el metodo de calculo, se regeneran y se documenta el cambio.

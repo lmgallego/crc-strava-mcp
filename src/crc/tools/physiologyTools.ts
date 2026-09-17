@@ -11,6 +11,7 @@ import { computeTorqueCadence } from "../analytics/torqueCadence.js";
 import { computeWorkAboveFtp, DEFAULT_RANGES_PCT_FTP } from "../analytics/workAboveFtp.js";
 import { computeTimeInZones, type ZoneDefinition } from "../analytics/zones.js";
 import { resolveMetric } from "../profile/profileResolver.js";
+import { describeProvenance } from "../profile/provenance.js";
 import { loadProfile } from "../profile/profileStore.js";
 import { fetchActivityStreams, type ActivityStreams } from "../sources/strava.js";
 import {
@@ -30,11 +31,19 @@ const activityIdInput = stravaId.describe("ID de la actividad de Strava.");
 async function resolveFromProfile(
     activity: ActivityStreams,
     metric: "ftp_w" | "weight_kg" | "hr_max_bpm",
-): Promise<{ value: number | null; source: unknown; error: CrcError | null }> {
+): Promise<{
+    value: number | null;
+    source: unknown;
+    error: CrcError | null;
+    estimated: boolean;
+    warnings: string[];
+}> {
     if (!activity.start_date) {
         return {
             value: null,
             source: null,
+            estimated: false,
+            warnings: [],
             error: {
                 code: metric === "ftp_w" ? CrcErrorCode.MISSING_FTP : CrcErrorCode.INVALID_PROFILE,
                 message: "La actividad no trae fecha: no se puede resolver el perfil por fecha.",
@@ -45,10 +54,15 @@ async function resolveFromProfile(
     const profile = await loadProfile();
     const r = resolveMetric(profile, metric, activity.start_date);
     if (r.found) {
+        const entry = { source: r.source, effective_from: r.effective_from, value: r.value };
+        // Un valor estimado contamina todo lo que se derive de él (D12).
+        const prov = describeProvenance(metric, entry);
         return {
             value: r.value,
-            source: { source: r.source, effective_from: r.effective_from, value: r.value },
+            source: entry,
             error: null,
+            estimated: prov.estimated,
+            warnings: prov.warnings,
         };
     }
 
@@ -58,7 +72,13 @@ async function resolveFromProfile(
             : metric === "weight_kg"
               ? CrcErrorCode.MISSING_WEIGHT
               : CrcErrorCode.INVALID_PROFILE;
-    return { value: null, source: null, error: { code, message: r.message } };
+    return {
+        value: null,
+        source: null,
+        estimated: false,
+        warnings: [],
+        error: { code, message: r.message },
+    };
 }
 
 // --- crc-aerobic-decoupling ----------------------------------------------
@@ -133,6 +153,8 @@ export const decouplingTool = {
             }
 
             const errors: CrcError[] = [];
+            const provenanceWarnings: string[] = [];
+            let ftpEstimated = false;
             let ftp = args.ftp_w ?? null;
             let ftpSource: unknown = ftp !== null ? { source: "override", value: ftp } : null;
 
@@ -141,6 +163,8 @@ export const decouplingTool = {
                 const r = await resolveFromProfile(activity, "ftp_w");
                 ftp = r.value;
                 ftpSource = r.source;
+                provenanceWarnings.push(...r.warnings);
+                ftpEstimated = r.estimated;
                 if (r.error) errors.push(r.error);
             }
 
@@ -194,6 +218,8 @@ export const decouplingTool = {
                     },
                     quality: {
                         ...quality,
+                        ftp_estimated: ftpEstimated,
+                        warnings: [...quality.warnings, ...provenanceWarnings],
                         filtered_valid_seconds: d.valid_seconds,
                         first_half_seconds: d.first_half_seconds,
                         second_half_seconds: d.second_half_seconds,
@@ -256,6 +282,8 @@ export const timeInZonesTool = {
             const kind = args.kind ?? "power";
 
             const errors: CrcError[] = [];
+            const provenanceWarnings: string[] = [];
+            let referenceEstimated = false;
             let reference = args.reference ?? null;
             let refSource: unknown = reference !== null ? { source: "override" } : null;
 
@@ -266,6 +294,8 @@ export const timeInZonesTool = {
                 const r = await resolveFromProfile(activity, metric);
                 reference = r.value;
                 refSource = r.source;
+                provenanceWarnings.push(...r.warnings);
+                referenceEstimated = r.estimated;
                 if (r.error) errors.push(r.error);
             }
 
@@ -319,7 +349,11 @@ export const timeInZonesTool = {
                         classified_seconds: z.classified_seconds,
                         unclassified_seconds: z.unclassified_seconds,
                     },
-                    quality: { ...quality },
+                    quality: {
+                        ...quality,
+                        reference_estimated: referenceEstimated,
+                        warnings: [...quality.warnings, ...provenanceWarnings],
+                    },
                     errors,
                 }),
             );
@@ -460,11 +494,15 @@ export const workAboveFtpTool = {
             let ftp = args.ftp_w ?? null;
             let ftpSource: unknown = ftp !== null ? { source: "override", value: ftp } : null;
             const errors: CrcError[] = [];
+            const provenanceWarnings: string[] = [];
+            let ftpEstimated = false;
 
             if (ftp === null) {
                 const r = await resolveFromProfile(activity, "ftp_w");
                 ftp = r.value;
                 ftpSource = r.source;
+                provenanceWarnings.push(...r.warnings);
+                ftpEstimated = r.estimated;
                 if (r.error) errors.push(r.error);
             }
 
@@ -506,7 +544,11 @@ export const workAboveFtpTool = {
                     },
                     method: w.method,
                     metrics: { ranges: w.ranges },
-                    quality: { ...quality },
+                    quality: {
+                        ...quality,
+                        ftp_estimated: ftpEstimated,
+                        warnings: [...quality.warnings, ...provenanceWarnings],
+                    },
                     errors,
                 }),
             );

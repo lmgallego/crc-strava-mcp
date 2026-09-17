@@ -1,0 +1,102 @@
+{
+  "fixture": "09-periodo",
+  "description": "Cuatro actividades: dos validas dentro de la ventana, una con potencia estimada que debe descartarse y una fuera de los 90 dias. El mejor 5 min y el mejor 20 min estan en actividades DISTINTAS a proposito.",
+  "now": "2026-09-17",
+  "inputs": {
+    "weight_kg": 72.0,
+    "window_days": 90
+  },
+  "per_activity": {
+    "1001": {
+      "date": "2026-09-10T08:00:00Z",
+      "device_watts": true,
+      "best_300s": {
+        "power_w": 320.0,
+        "start_time_s": 600
+      },
+      "best_1200s": {
+        "power_w": 230.0,
+        "start_time_s": 0
+      }
+    },
+    "1002": {
+      "date": "2026-08-20T08:00:00Z",
+      "device_watts": true,
+      "best_300s": {
+        "power_w": 265.0,
+        "start_time_s": 600
+      },
+      "best_1200s": {
+        "power_w": 265.0,
+        "start_time_s": 600
+      }
+    },
+    "1003": {
+      "date": "2026-08-01T08:00:00Z",
+      "device_watts": false,
+      "best_300s": {
+        "power_w": 400.0,
+        "start_time_s": 600
+      },
+      "best_1200s": {
+        "power_w": 287.5,
+        "start_time_s": 0
+      }
+    },
+    "1004": {
+      "date": "2026-05-01T08:00:00Z",
+      "device_watts": true,
+      "best_300s": {
+        "power_w": 450.0,
+        "start_time_s": 600
+      },
+      "best_1200s": {
+        "power_w": 450.0,
+        "start_time_s": 600
+      }
+    }
+  },
+  "expected": {
+    "in_window": [
+      "1001",
+      "1002",
+      "1003"
+    ],
+    "eligible": [
+      "1001",
+      "1002"
+    ],
+    "best_300s": {
+      "activity_id": "1001",
+      "power_w": 320.0,
+      "start_time_s": 600,
+      "activity_date": "2026-09-10T08:00:00Z"
+    },
+    "best_1200s": {
+      "activity_id": "1002",
+      "power_w": 265.0,
+      "start_time_s": 600,
+      "activity_date": "2026-08-20T08:00:00Z"
+    },
+    "vo2max": {
+      "best_5min_power_w": 320.0,
+      "relative_power_wkg": 4.4444,
+      "estimated_vo2max": 56.02,
+      "source_activity_id": "1001"
+    },
+    "ftp": {
+      "best_20min_power_w": 265.0,
+      "factor": 0.95,
+      "estimated_ftp_w": 251.75,
+      "source_activity_id": "1002"
+    }
+  },
+  "method": {
+    "best_effort": "mejor media sostenida sin cruzar huecos no validos",
+    "vo2max": "16.6 + 8.87 * (mejor 5 min / peso)",
+    "ftp": "mejor 20 min * 0.95",
+    "eligibility": "solo device_watts=true y dentro de la ventana de 90 dias",
+    "derivation": "calculado analiticamente sobre las series sinteticas"
+  },
+  "notes": "1003 tiene el pico mas alto de 5 min (400 W) pero potencia estimada: si aparece en el resultado, el filtro de device_watts no funciona. 1004 tiene 450 W en 20 min pero esta fuera de la ventana: si aparece, el filtro temporal no funciona."
+}
