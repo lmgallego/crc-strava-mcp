@@ -225,3 +225,53 @@ lógica de barrido.
 - Si al fijar un valor nuevo se cierra automáticamente la vigencia del anterior
   (`effective_to` al día previo).
 - Si un FTP declarado sin fecha asume "desde hoy" en vez de rechazarse.
+
+## Sprint 3 — Potencia (17/09/2026)
+
+### D13. Golden tests: coincidencia exacta, no dentro de tolerancia
+
+Las cinco fixtures de `tests/crc/fixtures/` pasaron a la primera con diferencia
+**0.000 W / 0.0000 %** en todas las métricas (media, NP, VI, IF, TSS, kJ y los
+tres puntos de la curva). Las tolerancias acordadas (NP ±1 W, TSS ±1 %, kJ ±0,5 %,
+curva ±1 W) no llegaron a usarse: ningún valor depende del margen.
+
+No se modificó ningún `.expected.json` ni ninguna tolerancia.
+
+Las fixtures se movieron de `tests/fixtures/` a `tests/crc/fixtures/`, que es la
+ruta que fija CLAUDE.md; `tests/fixtures/` conserva intactas las del repo original.
+
+### D14. Equivalencia entre el método del generador y `AlignedStreams`
+
+El generador de fixtures descarta las ventanas cuyo `time` no abarca exactamente
+`N-1` segundos (es decir, las que cruzan un hueco de muestreo). La implementación
+trabaja sobre la rejilla de 1 s y descarta las ventanas que contienen algún
+segundo con `valid[i] === false`. Son equivalentes porque `buildAlignedStreams`
+marca no válido todo hueco mayor que `gap_fill_s`.
+
+La fixture `04-paradas` es la que lo demuestra: con huecos de 45 s y 10 min,
+`valid_seconds` da 4755 y NP se mantiene en 190 W. Si el código cruzara los huecos
+o los rellenara con ceros, NP bajaría y el test lo cazaría.
+
+### D15. `start_date` en la fuente de streams
+
+Resolver FTP y peso por la fecha de la actividad exige conocerla, así que
+`fetchActivityStreams` devuelve ahora `start_date` junto a `device_watts` y
+`athlete_id`. `CACHE_VERSION` sube a 2: las entradas cacheadas con el formato
+anterior se invalidan solas.
+
+### D16. Disponibilidad parcial por parámetro
+
+- **Sin FTP** → `MISSING_FTP`, `intensity_factor` y `tss` a `null`, pero NP, VI,
+  media y kJ se devuelven igualmente. `available` sigue siendo `true`.
+- **Sin peso** → `MISSING_WEIGHT` y `average_wkg` a `null`; el resto se calcula.
+- **Sin stream de potencia** → `MISSING_POWER` con `available: false`.
+- `crc-power-curve` no reporta `MISSING_FTP`: el FTP no interviene en la curva.
+
+En ningún caso se usa `isError`, reservado a fallos de entrada o de red.
+
+### D17. La curva de potencia exige potencia medida
+
+`crc-power-curve` devuelve `available: false` cuando `power_source` no es
+`measured`, lo que incluye `device_watts` desconocido (por D8). `crc-calculate-power-metrics`
+**sí** calcula con potencia estimada: la restricción de CLAUDE.md es para power
+curve y VO2max, no para NP y TSS, y el bloque `quality` refleja el origen.

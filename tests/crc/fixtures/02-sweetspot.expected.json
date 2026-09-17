@@ -1,0 +1,40 @@
+{
+  "fixture": "02-sweetspot",
+  "description": "Sesion sweet spot 3x12 min al 90% FTP con recuperaciones de 5 min.",
+  "inputs": {
+    "ftp_w": 250,
+    "weight_kg": 72.0
+  },
+  "expected": {
+    "valid_seconds": 3960,
+    "average_power_w": 184.85,
+    "normalized_power_w": 198.71,
+    "variability_index": 1.075,
+    "intensity_factor": 0.7948,
+    "tss": 69.49,
+    "work_kj": 732.0,
+    "average_wkg": 2.567,
+    "power_curve": {
+      "60": {
+        "best_power_w": 225.0,
+        "best_power_wkg": 3.125,
+        "start_time_s": 600
+      },
+      "300": {
+        "best_power_w": 225.0,
+        "best_power_wkg": 3.125,
+        "start_time_s": 600
+      },
+      "1200": {
+        "best_power_w": 198.75,
+        "best_power_wkg": 2.76,
+        "start_time_s": 600
+      }
+    }
+  },
+  "method": {
+    "np": "media movil 30 s, ventanas completas, sin cruzar huecos no validos",
+    "tss_duration": "segundos validos",
+    "derivation": "calculado analiticamente sobre la serie sintetica"
+  }
+}

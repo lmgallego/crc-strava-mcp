@@ -1,0 +1,40 @@
+{
+  "fixture": "05-descenso-ceros",
+  "description": "Subida, descenso de 10 min a 0 W en rueda libre y vuelta. Los ceros son dato real, no ausencia.",
+  "inputs": {
+    "ftp_w": 250,
+    "weight_kg": 72.0
+  },
+  "expected": {
+    "valid_seconds": 3000,
+    "average_power_w": 166.0,
+    "normalized_power_w": 196.13,
+    "variability_index": 1.1815,
+    "intensity_factor": 0.7845,
+    "tss": 51.29,
+    "work_kj": 498.0,
+    "average_wkg": 2.306,
+    "power_curve": {
+      "60": {
+        "best_power_w": 215.0,
+        "best_power_wkg": 2.986,
+        "start_time_s": 0
+      },
+      "300": {
+        "best_power_w": 215.0,
+        "best_power_wkg": 2.986,
+        "start_time_s": 0
+      },
+      "1200": {
+        "best_power_w": 215.0,
+        "best_power_wkg": 2.986,
+        "start_time_s": 0
+      }
+    }
+  },
+  "method": {
+    "np": "media movil 30 s, ventanas completas, sin cruzar huecos no validos",
+    "tss_duration": "segundos validos",
+    "derivation": "calculado analiticamente sobre la serie sintetica"
+  }
+}

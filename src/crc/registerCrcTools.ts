@@ -4,6 +4,7 @@ import {
     getPerformanceProfileTool,
     setPerformanceProfileTool,
 } from "./tools/performanceProfileTools.js";
+import { powerCurveTool, powerMetricsTool } from "./tools/powerTools.js";
 
 /**
  * Único punto de registro de las herramientas CRC.
@@ -13,7 +14,13 @@ import {
  * unidireccional.
  */
 export function registerCrcTools(server: McpServer): void {
-    for (const tool of [getPerformanceProfileTool, setPerformanceProfileTool]) {
+    const tools = [
+        getPerformanceProfileTool,
+        setPerformanceProfileTool,
+        powerMetricsTool,
+        powerCurveTool,
+    ];
+    for (const tool of tools) {
         server.tool(tool.name, tool.description, tool.inputSchema.shape, tool.execute as never);
     }
 }

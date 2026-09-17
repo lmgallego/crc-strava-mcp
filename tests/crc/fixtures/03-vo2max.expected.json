@@ -1,0 +1,40 @@
+{
+  "fixture": "03-vo2max",
+  "description": "5x3 min al 136% FTP. El mejor 5 min NO puede ser 340 W: ningun tramo sostiene 300 s a esa potencia.",
+  "inputs": {
+    "ftp_w": 250,
+    "weight_kg": 72.0
+  },
+  "expected": {
+    "valid_seconds": 3120,
+    "average_power_w": 200.29,
+    "normalized_power_w": 251.08,
+    "variability_index": 1.2536,
+    "intensity_factor": 1.0043,
+    "tss": 87.42,
+    "work_kj": 624.9,
+    "average_wkg": 2.782,
+    "power_curve": {
+      "60": {
+        "best_power_w": 340.0,
+        "best_power_wkg": 4.722,
+        "start_time_s": 900
+      },
+      "300": {
+        "best_power_w": 270.0,
+        "best_power_wkg": 3.75,
+        "start_time_s": 780
+      },
+      "1200": {
+        "best_power_w": 241.0,
+        "best_power_wkg": 3.347,
+        "start_time_s": 900
+      }
+    }
+  },
+  "method": {
+    "np": "media movil 30 s, ventanas completas, sin cruzar huecos no validos",
+    "tss_duration": "segundos validos",
+    "derivation": "calculado analiticamente sobre la serie sintetica"
+  }
+}

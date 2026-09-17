@@ -34,7 +34,7 @@ export const CACHE_MAX_ENTRIES = 200;
 export const CACHE_MAX_BYTES = 128 * 1024 * 1024; // 128 MB
 
 /** Formato de la caché. Al cambiar, invalida automáticamente lo anterior. */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 export interface FetchStreamsOptions {
     accessToken?: string;
@@ -52,6 +52,8 @@ export interface ActivityStreams {
     athlete_id: string | null;
     /** `true` = potencia de medidor real; `false` = estimada; `null` = desconocido. */
     device_watts: boolean | null;
+    /** Fecha de inicio (ISO). Necesaria para resolver FTP y peso por fecha. */
+    start_date: string | null;
     aligned: AlignedStreams;
     from_cache: boolean;
     /** Tipos que Strava devolvió realmente. */
@@ -63,6 +65,7 @@ interface CachedPayload {
     activity_id: string;
     athlete_id: string | null;
     device_watts: boolean | null;
+    start_date: string | null;
     available_types: string[];
     raw: Record<string, unknown[]>;
     fetched_at: string;
@@ -115,6 +118,7 @@ export async function fetchActivityStreams(
         activity_id: payload.activity_id,
         athlete_id: payload.athlete_id,
         device_watts: payload.device_watts,
+        start_date: payload.start_date,
         aligned: buildAlignedStreams(time, raw, { gapFillS: options.gapFillS }),
         from_cache: fromCache,
         available_types: payload.available_types,
@@ -140,7 +144,11 @@ async function downloadStreams(
                 // Sin `resolution`: se quieren los datos nativos.
             },
         }),
-        stravaApi.get<{ device_watts?: boolean; athlete?: { id?: number | string } }>(
+        stravaApi.get<{
+            device_watts?: boolean;
+            athlete?: { id?: number | string };
+            start_date?: string;
+        }>(
             `activities/${activityId}`,
             { headers },
         ),
@@ -159,6 +167,7 @@ async function downloadStreams(
         activity_id: activityId,
         athlete_id: athleteRaw == null ? null : String(athleteRaw),
         device_watts: activityRes.data?.device_watts ?? null,
+        start_date: activityRes.data?.start_date ?? null,
         available_types: Object.keys(raw),
         raw,
         fetched_at: new Date().toISOString(),
