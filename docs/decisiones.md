@@ -391,15 +391,46 @@ Un único barrido compartido por `crc-estimate-vo2max` (5 min) y
 - Una actividad que falle al descargarse se anota en `skipped` y el barrido
   sigue; un 503 puntual no tumba la estimación entera.
 
-### D28. `model_reference` sin PMID inventado
+### D28. `model_reference` verificada
 
-El estudio de viabilidad pide confirmar en PubMed el artículo del modelo
-(atribuido a Sitko et al.) antes de fijarlo. **No se ha verificado en este
-sprint**, así que `model_reference` describe el modelo y declara
-`reference_verified: false` en lugar de citar un PMID sin comprobar. Una cita
-inventada es peor que ninguna: pasa por verificada.
+**Verificada el 17/09/2026.** `reference_verified: true`.
 
-Pendiente: confirmar autores y PMID, y actualizar `VO2MAX_MODEL.reference`.
+> Sitko S, Cirer-Sastre R, Corbi F, López-Laval I. *"Five-Minute Power-Based Test
+> to Predict Maximal Oxygen Consumption in Road Cycling"*. International Journal
+> of Sports Physiology and Performance, 2022;17(1):9-15.
+> DOI 10.1123/ijspp.2020-0923 · PMID 34225254
+
+Ecuación confirmada contra la publicación:
+
+```
+VO2max (mL·kg⁻¹·min⁻¹) = 8.87 × RPO5min + 16.6
+```
+
+Coincide con la implementación. `VO2MAX_MODEL` guarda además `doi` y `pmid` por
+separado, y hay un test que falla si alguien los cambia.
+
+**Límites de validez (en `quality.model_limitations`).** Salen del propio estudio
+y acotan a quién es aplicable la estimación. No son errores de cálculo: son el
+alcance del modelo, y por eso viajan con cada respuesta en lugar de quedarse en
+la documentación.
+
+1. **Muestra**: 46 ciclistas **varones** (38 ± 9 años, 71,4 ± 8,6 kg, VO2max
+   61,13 ± 9,05 mL·kg⁻¹·min⁻¹). Extrapolar a mujeres o a perfiles muy distintos
+   de esa muestra es una limitación conocida del modelo.
+2. **Ajuste**: el R² con datos del propio 5MT fue 0,61-0,77 (intervalo de
+   credibilidad del 95 %), frente a 0,81-0,88 usando un test incremental. Nuestro
+   caso —mejor 5 min observado— se parece al primero, así que el margen de error
+   es el mayor de los dos.
+
+La segunda limitación se suma a la advertencia que ya daba la especificación: un
+mejor 5 min observado tampoco garantiza que el esfuerzo fuera máximo. Son dos
+fuentes de incertidumbre distintas y ambas se declaran.
+
+### D28b. `effective_from` del FTP estimado: la fecha del esfuerzo
+
+Confirmado: `crc-estimate-ftp` propone `effective_from` igual a la fecha de la
+actividad donde se observó el mejor 20 min, no la de hoy. El FTP se demostró ese
+día, y fecharlo hoy falsearía el histórico de cualquier actividad intermedia.
 
 ### D29. La procedencia estimada viaja en `quality`
 

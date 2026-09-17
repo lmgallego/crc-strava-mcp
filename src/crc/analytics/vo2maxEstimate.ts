@@ -12,16 +12,34 @@ export const VO2MAX_MODEL = {
     input: "mejor potencia media de 5 min en W/kg",
     output: "ml·kg⁻¹·min⁻¹",
     /**
-     * Modelo publicado para un test máximo de 5 min en ciclistas de carretera.
-     *
-     * ponytail: la referencia bibliográfica exacta (autores y PMID) está
-     * PENDIENTE DE VERIFICAR en PubMed, como pide el estudio de viabilidad.
-     * No se escribe aquí un PMID sin comprobarlo: una cita inventada es peor
-     * que ninguna.
+     * Referencia verificada (D28).
+     * Ecuación publicada: VO2max (mL·kg⁻¹·min⁻¹) = 8.87 × RPO5min + 16.6
      */
-    reference: "Modelo publicado para 5-minute maximal test en ciclistas de carretera (referencia pendiente de verificar en PubMed).",
-    reference_verified: false,
+    reference:
+        "Sitko S, Cirer-Sastre R, Corbi F, López-Laval I. " +
+        '"Five-Minute Power-Based Test to Predict Maximal Oxygen Consumption in Road Cycling". ' +
+        "International Journal of Sports Physiology and Performance, 2022;17(1):9-15. " +
+        "DOI 10.1123/ijspp.2020-0923 · PMID 34225254",
+    reference_verified: true,
+    doi: "10.1123/ijspp.2020-0923",
+    pmid: "34225254",
 } as const;
+
+/**
+ * Límites de validez del modelo, tomados del propio estudio.
+ *
+ * No son fallos de cálculo: acotan a quién es aplicable la estimación. Viajan
+ * en `quality` para que quien lea el resultado sepa si su caso se parece al de
+ * la muestra original.
+ */
+export const MODEL_LIMITATIONS: readonly string[] = [
+    "Muestra del estudio: 46 ciclistas VARONES (38 ± 9 años, 71,4 ± 8,6 kg, " +
+        "VO2max 61,13 ± 9,05 mL·kg⁻¹·min⁻¹). Extrapolar a mujeres o a perfiles muy " +
+        "distintos de esa muestra es una limitación del modelo, no un error de cálculo.",
+    "El R² del modelo con datos del propio 5MT fue 0,61-0,77 (intervalo de credibilidad 95 %), " +
+        "frente a 0,81-0,88 usando un test incremental. Esta estimación se parece al primer " +
+        "caso, así que su margen de error es el mayor de los dos.",
+];
 
 /** Etiqueta obligatoria de la salida. Nunca `lab_vo2max`. */
 export const VO2MAX_LABEL = "estimated_vo2max";
@@ -47,6 +65,8 @@ export interface Vo2maxResult {
     label: string;
     model_reference: string;
     model: { intercept: number; slope: number; formula: string };
+    /** Límites de validez del modelo según el estudio de origen. */
+    model_limitations: readonly string[];
     method: Record<string, string>;
     warnings: string[];
 }
@@ -95,8 +115,9 @@ export function estimateVo2max(input: Vo2maxInput): Vo2maxResult {
         model: {
             intercept: VO2MAX_MODEL.intercept,
             slope: VO2MAX_MODEL.slope,
-            formula: "VO2max = 16.6 + 8.87 × P5min[W/kg]",
+            formula: "VO2max = 8.87 × RPO5min[W/kg] + 16.6",
         },
+        model_limitations: MODEL_LIMITATIONS,
         method: {
             model: "VO2max [ml·kg⁻¹·min⁻¹] = 16.6 + 8.87 × (mejor 5 min / peso).",
             weight:

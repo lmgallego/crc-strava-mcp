@@ -261,3 +261,27 @@ describe("propagación del FTP estimado (D12)", () => {
         expect(r.quality.ftp_estimated).toBe(false);
     });
 });
+
+describe("crc-estimate-vo2max · límites del modelo (D28)", () => {
+    it("quality incluye las dos limitaciones del estudio", async () => {
+        const r = parse(await estimateVo2maxTool.execute({ mode: "activity", activityId: "500" }));
+
+        expect(r.quality.model_limitations).toHaveLength(2);
+        const texto = r.quality.model_limitations.join(" ");
+        expect(texto).toContain("VARONES");
+        expect(texto).toContain("0,61-0,77");
+    });
+
+    it("las limitaciones también viajan en warnings", async () => {
+        const r = parse(await estimateVo2maxTool.execute({ mode: "activity", activityId: "500" }));
+        expect(r.quality.warnings.join(" ")).toContain("46 ciclistas");
+    });
+
+    it("model_reference lleva la cita completa verificada", async () => {
+        const r = parse(await estimateVo2maxTool.execute({ mode: "activity", activityId: "500" }));
+
+        expect(r.metrics.model_reference).toContain("Sitko");
+        expect(r.metrics.model_reference).toContain("PMID 34225254");
+        expect(r.metrics.model_reference).not.toContain("pendiente");
+    });
+});

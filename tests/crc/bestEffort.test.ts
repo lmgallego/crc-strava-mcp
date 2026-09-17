@@ -228,6 +228,26 @@ describe("vo2maxEstimate · la ecuación", () => {
         expect(VO2MAX_MODEL.slope).toBe(8.87);
     });
 
+    it("la referencia está verificada y cita el estudio de origen (D28)", () => {
+        expect(VO2MAX_MODEL.reference_verified).toBe(true);
+        expect(VO2MAX_MODEL.pmid).toBe("34225254");
+        expect(VO2MAX_MODEL.doi).toBe("10.1123/ijspp.2020-0923");
+        expect(VO2MAX_MODEL.reference).toContain("Sitko");
+        expect(VO2MAX_MODEL.reference).toContain("2022");
+    });
+
+    it("declara los límites de validez del modelo", () => {
+        const r = estimateVo2max({ best5MinPowerW: 360, weightKg: 72 });
+        const texto = r.model_limitations.join(" ");
+
+        // Muestra del estudio: hombres, perfil concreto.
+        expect(texto).toContain("VARONES");
+        expect(texto).toContain("46");
+        // Margen de error mayor en nuestro caso que con test incremental.
+        expect(texto).toContain("0,61-0,77");
+        expect(r.model_limitations).toHaveLength(2);
+    });
+
     it("etiqueta estimated_vo2max y nunca lab_vo2max", () => {
         const r = estimateVo2max({ best5MinPowerW: 360, weightKg: 72 });
 

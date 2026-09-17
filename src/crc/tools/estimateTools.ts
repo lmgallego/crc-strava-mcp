@@ -139,7 +139,14 @@ export const estimateVo2maxTool = {
                         ...effort.quality,
                         maximal_effort_evidence: args.maximal_effort_evidence ?? false,
                         weight_estimated: weight.estimated,
-                        warnings: [...warnings, ...v.warnings, ...effort.warnings],
+                        // Limites de validez del modelo: acotan a quien aplica.
+                        model_limitations: v.model_limitations,
+                        warnings: [
+                            ...warnings,
+                            ...v.warnings,
+                            ...v.model_limitations,
+                            ...effort.warnings,
+                        ],
                     },
                     errors,
                 }),
