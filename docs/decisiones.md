@@ -129,3 +129,38 @@ el formato. Un fallo de caché nunca tumba la petición.
 
 La verificación de `tools/list` se repetía en cada sprint; queda como script
 reutilizable con modo `--diff`.
+
+### D11. `src/schemas/` es zona neutral
+
+`src/schemas/` es una **zona neutral compartida por las dos capas**: el código
+original y la capa CRC pueden importar de ahí. Existe porque la regla de
+dependencia unidireccional (las tools originales nunca importan de `src/crc/`)
+dejaba sin sitio a los helpers que ambas capas necesitan, y la alternativa era
+duplicarlos.
+
+Reglas de la zona neutral:
+
+- **No depende de nada.** Nada en `src/schemas/` puede importar de `src/crc/`
+  ni de `src/tools/`; solo librerías externas (Zod) y tipos propios. Si un
+  helper necesita algo de la capa CRC, no es neutral y no va aquí.
+- **Solo contratos genéricos**, no analítica: validación y normalización de
+  datos que existen igual en ambos lados (identificadores, booleanos tolerantes
+  y similares). Cualquier cosa que sepa de NP, TSS, streams o perfil pertenece a
+  `src/crc/`.
+- **La capa CRC la consume a través de sus propios módulos**, no directamente:
+  `src/crc/schemas/mcpSchemas.ts` reexporta lo que necesita, de modo que las
+  tools CRC siguen importando de `src/crc/schemas/` y la procedencia real puede
+  cambiar sin tocarlas.
+- **Añadir algo aquí es una decisión, no un atajo.** El criterio es que lo
+  necesiten de verdad las dos capas. Si solo lo usa una, vive en esa capa.
+
+Dirección de dependencias resultante:
+
+```
+src/tools/  (original) ─┐
+                        ├─> src/schemas/  (neutral, no importa de nadie)
+src/crc/    (CRC) ──────┘
+                        └─> src/crc/  nunca es importado por el código original
+```
+
+Contenido actual: `stravaId.ts` (`stravaId`, `flexibleBoolean`), ver [D6](#d6-stravaid-movido-a-srcschemasstravaidts).
