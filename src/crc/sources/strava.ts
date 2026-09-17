@@ -34,7 +34,7 @@ export const CACHE_MAX_ENTRIES = 200;
 export const CACHE_MAX_BYTES = 128 * 1024 * 1024; // 128 MB
 
 /** Formato de la caché. Al cambiar, invalida automáticamente lo anterior. */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 export interface FetchStreamsOptions {
     accessToken?: string;
@@ -54,10 +54,23 @@ export interface ActivityStreams {
     device_watts: boolean | null;
     /** Fecha de inicio (ISO). Necesaria para resolver FTP y peso por fecha. */
     start_date: string | null;
+    /** Datos descriptivos de la actividad, de la misma llamada. */
+    details: ActivityDetails;
     aligned: AlignedStreams;
     from_cache: boolean;
     /** Tipos que Strava devolvió realmente. */
     available_types: string[];
+}
+
+/** Datos descriptivos de la actividad (no métricas). */
+export interface ActivityDetails {
+    name: string | null;
+    sport_type: string | null;
+    distance_m: number | null;
+    moving_time_s: number | null;
+    elapsed_time_s: number | null;
+    total_elevation_gain_m: number | null;
+    trainer: boolean | null;
 }
 
 interface CachedPayload {
@@ -66,6 +79,7 @@ interface CachedPayload {
     athlete_id: string | null;
     device_watts: boolean | null;
     start_date: string | null;
+    details: ActivityDetails;
     available_types: string[];
     raw: Record<string, unknown[]>;
     fetched_at: string;
@@ -119,6 +133,7 @@ export async function fetchActivityStreams(
         athlete_id: payload.athlete_id,
         device_watts: payload.device_watts,
         start_date: payload.start_date,
+        details: payload.details,
         aligned: buildAlignedStreams(time, raw, { gapFillS: options.gapFillS }),
         from_cache: fromCache,
         available_types: payload.available_types,
@@ -148,6 +163,14 @@ async function downloadStreams(
             device_watts?: boolean;
             athlete?: { id?: number | string };
             start_date?: string;
+            name?: string;
+            sport_type?: string;
+            type?: string;
+            distance?: number;
+            moving_time?: number;
+            elapsed_time?: number;
+            total_elevation_gain?: number;
+            trainer?: boolean;
         }>(
             `activities/${activityId}`,
             { headers },
@@ -168,6 +191,16 @@ async function downloadStreams(
         athlete_id: athleteRaw == null ? null : String(athleteRaw),
         device_watts: activityRes.data?.device_watts ?? null,
         start_date: activityRes.data?.start_date ?? null,
+        // Se guardan de la MISMA llamada: no cuesta una petición extra.
+        details: {
+            name: activityRes.data?.name ?? null,
+            sport_type: activityRes.data?.sport_type ?? activityRes.data?.type ?? null,
+            distance_m: activityRes.data?.distance ?? null,
+            moving_time_s: activityRes.data?.moving_time ?? null,
+            elapsed_time_s: activityRes.data?.elapsed_time ?? null,
+            total_elevation_gain_m: activityRes.data?.total_elevation_gain ?? null,
+            trainer: activityRes.data?.trainer ?? null,
+        },
         available_types: Object.keys(raw),
         raw,
         fetched_at: new Date().toISOString(),

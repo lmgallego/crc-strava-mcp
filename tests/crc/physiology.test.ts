@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { computeTimeInZones, DEFAULT_POWER_ZONES_PCT_FTP } from "../../src/crc/analytics/zones.ts";
+import {
+    summariseHrAndCadence,
+    summariseSignal,
+} from "../../src/crc/analytics/streamSummary.ts";
 import { computeTorqueCadence, torqueNm } from "../../src/crc/analytics/torqueCadence.ts";
 import { computeWorkAboveFtp } from "../../src/crc/analytics/workAboveFtp.ts";
 import { buildAlignedStreams } from "../../src/crc/streams/alignedStreams.ts";
@@ -359,5 +363,52 @@ describe("workAboveFtp", () => {
         expect(total).toBe(100);
         expect(r.ranges[0]!.seconds).toBe(0); // 1.2 no entra en [1.0, 1.2)
         expect(r.ranges[1]!.seconds).toBe(100);
+    });
+});
+
+describe("streamSummary", () => {
+    it("resume media, máximo y mínimo sobre segundos válidos", () => {
+        const a = build([
+            [100, 200, 90, 140],
+            [100, 200, 90, 160],
+        ]);
+        const hr = summariseSignal(a, "heartrate");
+
+        expect(hr.available).toBe(true);
+        expect(hr.seconds).toBe(200);
+        expect(hr.mean).toBeCloseTo(150, 2);
+        expect(hr.max).toBe(160);
+        expect(hr.min).toBe(140);
+    });
+
+    it("excluye los tramos no válidos", () => {
+        const a = build([[1800, 200, 90, 150]], [[600, 300]]);
+        const hr = summariseSignal(a, "heartrate");
+
+        expect(hr.seconds).toBe(1500);
+    });
+
+    it("la cadencia se resume sin los ceros de rueda libre", () => {
+        const a = build([
+            [100, 200, 90],
+            [100, 0, 0],
+        ]);
+        const s = summariseHrAndCadence(a);
+
+        // Con los ceros la media sería 45; sin ellos, 90.
+        expect(s.cadence.mean).toBe(90);
+        expect(s.cadence.seconds).toBe(100);
+        expect(s.cadence.method).toContain("excluyen");
+    });
+
+    it("la FC sí incluye los ceros si los hubiera, por ser dato legítimo", () => {
+        const a = build([[100, 200, 90, 150]]);
+        const s = summariseHrAndCadence(a);
+        expect(s.heartrate.method).toContain("incluyendo");
+    });
+
+    it("una señal ausente no está disponible", () => {
+        const a = buildAlignedStreams([0, 1], { watts: [100, 100] });
+        expect(summariseSignal(a, "heartrate").available).toBe(false);
     });
 });

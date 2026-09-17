@@ -454,3 +454,73 @@ misma no pasara los tests. Además:
 
 Si el resultado es una de esas dos, el filtro que falla es el de potencia medida
 o el temporal, respectivamente.
+
+## Sprint 6 — Orquestación (17/09/2026)
+
+Las 11 herramientas CRC de la especificación quedan completas. En total son 12
+tools CRC: las 11 de la especificación más `crc-estimate-ftp`, que nació de D12
+y no figura en el documento original.
+
+### D31. `streamSummary.ts`, la única pieza de cálculo nueva del sprint
+
+El sprint no añade fórmulas, pero la sección 7.10 pide "HR/cadence summaries" y
+no existía nada equivalente en `analytics/`: `zones.ts` da distribuciones,
+`torqueCadence.ts` da bins, ninguno da media y máximo por señal. Se añade un
+módulo mínimo de estadística descriptiva (media, máximo, mínimo sobre segundos
+válidos).
+
+No reimplementa nada: NP, TSS, zonas, torque y desacople se consumen de sus
+módulos. Hay una comprobación en el checklist que falla si aparece un cálculo
+propio en `orchestrationTools.ts`.
+
+**La cadencia se resume excluyendo los ceros.** La rueda libre no describe cómo
+pedalea nadie: con los ceros dentro, una bajada larga hunde la cadencia media y
+el número deja de significar nada. La FC, en cambio, incluye todos sus valores.
+Cada caso lo declara su propio `method`, para que la diferencia no sorprenda.
+
+### D32. Los detalles de la actividad no cuestan una llamada extra
+
+`crc-analyze-cycling-activity` necesita nombre, distancia, desnivel y tipo de
+actividad. Esos datos ya venían en la llamada a `activities/{id}` que
+`fetchActivityStreams` hacía para obtener `device_watts`: solo se guardaban menos
+campos. Ahora se conserva un bloque `details` en el payload cacheado.
+`CACHE_VERSION` sube a 3.
+
+Alternativa descartada: llamar a `getActivityById` por separado. Habría duplicado
+una petición que ya se estaba haciendo.
+
+### D33. Disponibilidad parcial: la salida dice qué falta y por qué
+
+Cada módulo de `crc-analyze-cycling-activity` lleva su `available` y, si es
+`false`, un `reason`. El bloque `quality` del conjunto agrega esas razones
+prefijadas con el nombre del módulo, más `modules_available` / `modules_total`.
+
+Caso intermedio, que no es "disponible" ni "no disponible": con potencia pero sin
+FTP, `power_metrics` sigue `available: true` y devuelve NP, VI, media y kJ, con
+`intensity_factor` y `tss` a `null` y la lista explícita en
+`unavailable_metrics`. Marcar el módulo entero como no disponible habría escondido
+métricas perfectamente válidas.
+
+### D34. `missing_data` frente a cero legítimo
+
+En `crc-compare-activities` cada celda es
+`{ value, status: "ok" | "missing_data", reason? }`:
+
+- Una actividad rodada a 0 W da `{ value: 0, status: "ok" }`.
+- Una actividad sin pulsómetro da `{ value: null, status: "missing_data", reason: "Sin FC." }`.
+
+Un `null` a secas habría confundido las dos cosas, que es justo lo que prohíbe la
+sección 7.9. Todas las filas comparten el mismo conjunto de claves
+(`metric_keys`), para que la tabla sea comparable columna a columna aunque una
+actividad no tenga un dato.
+
+### D35. Propiedad de las actividades comprobada contra el atleta autenticado
+
+`crc-compare-activities` consulta `getAuthenticatedAthlete` (del cliente original,
+sin reimplementar nada) y rechaza toda actividad cuyo `athlete_id` no coincida,
+anotándola en `quality.rejected` con su motivo. Es la regla de que los datos solo
+se muestran a su propietario, aplicada en el punto donde podrían colarse
+actividades ajenas.
+
+Los IDs repetidos se descartan antes de pedirlos: no aportan nada a una
+comparación y ahorran una llamada. El resto se apoya en la caché del Sprint 2.

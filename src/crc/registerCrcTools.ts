@@ -6,6 +6,10 @@ import {
 } from "./tools/performanceProfileTools.js";
 import { estimateFtpTool, estimateVo2maxTool } from "./tools/estimateTools.js";
 import {
+    analyzeCyclingActivityTool,
+    compareActivitiesTool,
+} from "./tools/orchestrationTools.js";
+import {
     decouplingTool,
     timeInZonesTool,
     torqueCadenceTool,
@@ -32,6 +36,8 @@ export function registerCrcTools(server: McpServer): void {
         workAboveFtpTool,
         estimateVo2maxTool,
         estimateFtpTool,
+        analyzeCyclingActivityTool,
+        compareActivitiesTool,
     ];
     for (const tool of tools) {
         server.tool(tool.name, tool.description, tool.inputSchema.shape, tool.execute as never);
