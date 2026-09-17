@@ -4,10 +4,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
  * Único punto de registro de las herramientas CRC.
  * Se llama al final de `server.ts`, después de las herramientas originales.
  *
- * Vacío en Sprint 0: el esqueleto existe para que las tools CRC se enganchen
- * aquí sin tocar el registro original.
+ * Sprint 1: los helpers de contrato ya existen
+ * (`schemas/mcpSchemas.ts` y `schemas/crcToolResponse.ts`), pero todavía no se
+ * registra ninguna herramienta. Al añadir la primera, renombrar `_server` a
+ * `server` (el guion bajo solo está para satisfacer `noUnusedParameters`).
  */
-// El parámetro lleva `_` porque aún no se usa (noUnusedParameters).
 export function registerCrcTools(_server: McpServer): void {
-    // Sprint 0: sin herramientas CRC todavía.
+    // Sprint 1: sin herramientas CRC todavía. La analítica llega en Sprint 2+.
 }

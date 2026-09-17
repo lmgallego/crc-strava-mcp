@@ -636,7 +636,7 @@ export async function getAthleteStats(accessToken: string, athleteId: number): P
  * @returns A promise that resolves to the detailed activity data.
  * @throws Throws an error if the API request fails or the response format is unexpected.
  */
-export async function getActivityById(accessToken: string, activityId: number): Promise<StravaDetailedActivity> {
+export async function getActivityById(accessToken: string, activityId: number | string): Promise<StravaDetailedActivity> {
     if (!accessToken) {
         throw new Error("Strava access token is required.");
     }
@@ -744,7 +744,7 @@ export async function listStarredSegments(accessToken: string): Promise<StravaSe
  * @returns A promise that resolves to the detailed segment data.
  * @throws Throws an error if the API request fails or the response format is unexpected.
  */
-export async function getSegmentById(accessToken: string, segmentId: number): Promise<StravaDetailedSegment> {
+export async function getSegmentById(accessToken: string, segmentId: number | string): Promise<StravaDetailedSegment> {
     if (!accessToken) {
         throw new Error("Strava access token is required.");
     }
@@ -838,7 +838,7 @@ export async function exploreSegments(
  * @returns A promise that resolves to the detailed segment data after the update.
  * @throws Throws an error if the API request fails or the response format is unexpected.
  */
-export async function starSegment(accessToken: string, segmentId: number, starred: boolean): Promise<StravaDetailedSegment> {
+export async function starSegment(accessToken: string, segmentId: number | string, starred: boolean): Promise<StravaDetailedSegment> {
     if (!accessToken) {
         throw new Error("Strava access token is required.");
     }
@@ -887,7 +887,7 @@ export async function starSegment(accessToken: string, segmentId: number, starre
  * @returns A promise that resolves to the detailed segment effort data.
  * @throws Throws an error if the API request fails or the response format is unexpected.
  */
-export async function getSegmentEffort(accessToken: string, effortId: number): Promise<StravaDetailedSegmentEffort> {
+export async function getSegmentEffort(accessToken: string, effortId: number | string): Promise<StravaDetailedSegmentEffort> {
     if (!accessToken) {
         throw new Error("Strava access token is required.");
     }
@@ -930,7 +930,7 @@ export async function getSegmentEffort(accessToken: string, effortId: number): P
  */
 export async function listSegmentEfforts(
     accessToken: string,
-    segmentId: number,
+    segmentId: number | string,
     params: SegmentEffortsParams = {}
 ): Promise<StravaDetailedSegmentEffort[]> {
     if (!accessToken) {
@@ -1292,7 +1292,7 @@ export async function getAthleteZones(accessToken: string): Promise<StravaAthlet
  */
 export async function getActivityPhotos(
     accessToken: string,
-    activityId: number,
+    activityId: number | string,
     size: number = 2048
 ): Promise<StravaPhoto[]> {
     if (!accessToken) {
@@ -1375,7 +1375,7 @@ export interface SegmentLeaderboardParams {
  */
 export async function getSegmentLeaderboard(
     accessToken: string,
-    segmentId: number,
+    segmentId: number | string,
     params: SegmentLeaderboardParams = {}
 ): Promise<StravaLeaderboardResponse> {
     if (!accessToken) {

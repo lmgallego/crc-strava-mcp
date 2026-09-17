@@ -55,10 +55,11 @@ export const getActivityPhotosTool = {
         }
 
         try {
-            // Convert id to number if it's a string
-            const activityId = typeof id === 'string' ? parseInt(id, 10) : id;
+            // Keep the ID as a string: Strava IDs are 64-bit and converting a
+            // long ID through Number silently corrupts it.
+            const activityId = String(id).trim();
 
-            if (isNaN(activityId)) {
+            if (!/^\d+$/.test(activityId)) {
                 return {
                     content: [{ type: "text" as const, text: `Invalid activity ID: ${id}` }],
                     isError: true

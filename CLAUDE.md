@@ -5,7 +5,8 @@ La especificación completa está en `docs/CRC_Strava_MCP_Especificacion_Tecnica
 y el estudio de viabilidad en `docs/Estudio_CRC_Strava_MCP.md`. Léelos antes de cada sprint.
 
 ## Reglas no negociables
-- Las 25 herramientas originales NO se renombran, eliminan ni cambian de contrato.
+- Las 26 herramientas originales NO se renombran, eliminan ni cambian de contrato.
+  (Son 26, no 25: verificado en runtime con `tools/list` contra `dist/server.js`.)
 - Las herramientas originales NUNCA importan nada de `src/crc/`.
 - Todo cálculo (NP, IF, TSS, kJ, curvas, desacople, torque, VO2max) es TypeScript determinista y testeado. Nada se delega al LLM.
 - Los datos solo se muestran al propio usuario autenticado. Una instancia = un atleta. Sin multitenencia, sin compartir, sin exportar a terceros.
