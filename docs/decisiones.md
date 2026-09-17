@@ -164,3 +164,45 @@ src/crc/    (CRC) ──────┘
 ```
 
 Contenido actual: `stravaId.ts` (`stravaId`, `flexibleBoolean`), ver [D6](#d6-stravaid-movido-a-srcschemasstravaidts).
+
+### D12 · Estimación de FTP desde el historial
+
+**Alcance: Sprint 5. No implementado. Esta entrada solo deja registrada la decisión.**
+
+**Contexto.** El producto va dirigido a cicloturistas, que muchas veces no conocen
+su FTP. El perfil CRC no puede depender de ninguna plataforma externa, así que el
+valor tiene que salir del propio usuario o de sus datos de Strava.
+
+**Flujo acordado:**
+
+1. **Preguntar siempre primero al usuario.** Si lo declara, `source: "manual"`.
+2. Si no lo sabe, **estimar desde su historial**: mejor 20 min × 0,95.
+3. **Nunca guardar la estimación en silencio.** Se propone el valor, se explica de
+   qué actividad y fecha sale, y se espera confirmación del usuario antes de
+   persistirlo.
+4. El valor estimado se guarda con `source: "estimated_20min"`, nunca `"manual"`.
+
+**Implicaciones que hay que respetar cuando se implemente:**
+
+- Cualquier análisis que use un FTP estimado debe reflejarlo en su bloque
+  `quality`: IF y TSS heredan esa incertidumbre.
+- **El mejor 20 min observado NO es un test de 20 minutos.** Si no hay evidencia
+  de esfuerzo máximo, `quality` debe advertirlo. Mismo tratamiento que la
+  especificación ya da al mejor 5 min en VO2max (sección 7.11).
+- Barrer el historial cuesta llamadas a la API: ventana acotada (90 días por
+  defecto), tope de actividades configurable y uso obligatorio de la caché de
+  streams del Sprint 2 (ver [D9](#d9-caché-de-streams)).
+- **Solo cuenta potencia medida.** Con `device_watts=false` no se estima FTP,
+  igual que con power curve y VO2max (ver [D8](#d8-power_source-desconocido--estimated)).
+
+**Nota de implementación para el Sprint 5.** Esto comparte maquinaria con
+`crc-estimate-vo2max`: mejor esfuerzo de una duración dada dentro de una ventana
+temporal. Escribir **una sola** función reutilizable, del tipo
+`bestEffortInPeriod(duration_s, days)`, y que ambas la consuman. No duplicar la
+lógica de barrido.
+
+**Pendiente de decidir en el Sprint 5:**
+
+- Si al fijar un valor nuevo se cierra automáticamente la vigencia del anterior
+  (`effective_to` al día previo).
+- Si un FTP declarado sin fecha asume "desde hoy" en vez de rechazarse.
