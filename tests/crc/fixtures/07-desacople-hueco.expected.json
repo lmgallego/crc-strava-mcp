@@ -1,0 +1,32 @@
+{
+  "fixture": "07-desacople-hueco",
+  "description": "Hueco asimetrico de 10 min. La mitad por tiempo valido cae en un punto distinto que la mitad por indice de rejilla, y el desacople resultante es otro.",
+  "inputs": {
+    "ftp_w": 250,
+    "weight_kg": 72.0,
+    "filters": {
+      "warmup_exclusion_min": 0,
+      "moving_only": false
+    }
+  },
+  "expected": {
+    "first_half_ef": 1.428571,
+    "second_half_ef": 1.333333,
+    "decoupling_pct": 6.6667,
+    "valid_seconds": 3600,
+    "first_half_seconds": 1800,
+    "second_half_seconds": 1800,
+    "first_half_mean_power_w": 200.0,
+    "first_half_mean_hr_bpm": 140.0,
+    "second_half_mean_power_w": 200.0,
+    "second_half_mean_hr_bpm": 150.0,
+    "wrong_if_split_by_grid_index": 5.7692
+  },
+  "method": {
+    "ef": "EF = media(potencia) / media(FC) por mitad",
+    "halves": "mitades por tiempo valido de la muestra filtrada, no por indice",
+    "decoupling": "(EF1 - EF2) / EF1 * 100",
+    "derivation": "calculado analiticamente sobre la serie sintetica"
+  },
+  "notes": "Partir por indice de rejilla da wrong_if_split_by_grid_index en vez de decoupling_pct. El test comprueba que NO sale ese valor."
+}

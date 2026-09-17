@@ -1,0 +1,31 @@
+{
+  "fixture": "06-desacople-deriva",
+  "description": "60 min a 200 W con deriva cardiaca lineal de 135 a 145 bpm. Caso base del desacople.",
+  "inputs": {
+    "ftp_w": 250,
+    "weight_kg": 72.0,
+    "filters": {
+      "warmup_exclusion_min": 0,
+      "moving_only": false
+    }
+  },
+  "expected": {
+    "first_half_ef": 1.454553,
+    "second_half_ef": 1.403502,
+    "decoupling_pct": 3.5097,
+    "valid_seconds": 3600,
+    "first_half_seconds": 1800,
+    "second_half_seconds": 1800,
+    "first_half_mean_power_w": 200.0,
+    "first_half_mean_hr_bpm": 137.4993,
+    "second_half_mean_power_w": 200.0,
+    "second_half_mean_hr_bpm": 142.5007
+  },
+  "method": {
+    "ef": "EF = media(potencia) / media(FC) por mitad",
+    "halves": "mitades por tiempo valido de la muestra filtrada, no por indice",
+    "decoupling": "(EF1 - EF2) / EF1 * 100",
+    "derivation": "calculado analiticamente sobre la serie sintetica"
+  },
+  "notes": "Potencia constante y FC creciente: todo el desacople viene de la FC. Si el codigo promediara EF por muestra en vez de media(P)/media(FC), el valor cambia."
+}

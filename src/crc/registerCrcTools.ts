@@ -4,6 +4,12 @@ import {
     getPerformanceProfileTool,
     setPerformanceProfileTool,
 } from "./tools/performanceProfileTools.js";
+import {
+    decouplingTool,
+    timeInZonesTool,
+    torqueCadenceTool,
+    workAboveFtpTool,
+} from "./tools/physiologyTools.js";
 import { powerCurveTool, powerMetricsTool } from "./tools/powerTools.js";
 
 /**
@@ -19,6 +25,10 @@ export function registerCrcTools(server: McpServer): void {
         setPerformanceProfileTool,
         powerMetricsTool,
         powerCurveTool,
+        decouplingTool,
+        timeInZonesTool,
+        torqueCadenceTool,
+        workAboveFtpTool,
     ];
     for (const tool of tools) {
         server.tool(tool.name, tool.description, tool.inputSchema.shape, tool.execute as never);

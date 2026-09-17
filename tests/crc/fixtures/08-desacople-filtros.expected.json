@@ -1,0 +1,34 @@
+{
+  "fixture": "08-desacople-filtros",
+  "description": "Calentamiento, tramo por debajo del rango de potencia y tramo parado. Solo quedan los dos bloques utiles: 1800 s a FC 140 y 1800 s a FC 150.",
+  "inputs": {
+    "ftp_w": 250,
+    "weight_kg": 72.0,
+    "filters": {
+      "warmup_exclusion_min": 10,
+      "moving_only": true,
+      "power_min_pct_ftp": 0.56,
+      "power_max_pct_ftp": 1.5
+    }
+  },
+  "expected": {
+    "first_half_ef": 1.428571,
+    "second_half_ef": 1.333333,
+    "decoupling_pct": 6.6667,
+    "valid_seconds": 3600,
+    "first_half_seconds": 1800,
+    "second_half_seconds": 1800,
+    "first_half_mean_power_w": 200.0,
+    "first_half_mean_hr_bpm": 140.0,
+    "second_half_mean_power_w": 200.0,
+    "second_half_mean_hr_bpm": 150.0,
+    "excluded_seconds": 1100
+  },
+  "method": {
+    "ef": "EF = media(potencia) / media(FC) por mitad",
+    "halves": "mitades por tiempo valido de la muestra filtrada, no por indice",
+    "decoupling": "(EF1 - EF2) / EF1 * 100",
+    "derivation": "calculado analiticamente sobre la serie sintetica"
+  },
+  "notes": "Valida que los tres filtros se aplican ANTES de partir en mitades. Sin filtrar, las mitades caerian en otro sitio y el desacople seria distinto."
+}

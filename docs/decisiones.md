@@ -275,3 +275,74 @@ En ningún caso se usa `isError`, reservado a fallos de entrada o de red.
 `measured`, lo que incluye `device_watts` desconocido (por D8). `crc-calculate-power-metrics`
 **sí** calcula con potencia estimada: la restricción de CLAUDE.md es para power
 curve y VO2max, no para NP y TSS, y el bloque `quality` refleja el origen.
+
+## Sprint 4 — Fisiología de campo (17/09/2026)
+
+### D18. Fixtures propias para el desacople (06-08)
+
+Las fixtures 01-05 llevan FC derivada de la potencia por fórmula
+(`hr = 95 + 0.19*W`): sin deriva cardíaca, el desacople de cualquier serie a
+potencia constante saldría 0 y el test no probaría nada. Se añaden tres fixtures
+con la deriva construida a propósito, generadas por
+`generador-fixtures-desacople.py` y derivadas analíticamente en Python, sin usar
+la implementación TypeScript.
+
+`07-desacople-hueco` es la importante: con un hueco asimétrico de 10 min, partir
+por tiempo válido da **6.6667 %** y partir por índice de rejilla daría
+**5.7692 %**. El `.expected.json` guarda los dos y el test comprueba que sale el
+primero y que dista del segundo. Sin esa asimetría, ambos métodos coinciden y el
+error pasaría desapercibido.
+
+### D19. EF = media(P) / media(FC), no media de (P/FC)
+
+La especificación dice "EF = power/hr" sin precisar. Se elige el cociente de
+medias por mitad, que es el método estándar (Friel) y el que declara el
+generador. La media de cocientes por muestra da otro número y penaliza en exceso
+los segundos de FC baja. Declarado en `method.ef`.
+
+### D20. El desacople no se interpreta
+
+`computeDecoupling` devuelve el valor y los filtros, sin ningún campo de
+veredicto. Hay un test que comprueba que la salida no contiene "fatiga",
+"adaptación" ni campos tipo `verdict`/`rating`, inspeccionando los datos y
+excluyendo `method` (donde la palabra aparece a propósito, en la frase que
+declara que no se interpreta).
+
+### D21. Fronteras semiabiertas en zonas y rangos
+
+Toda zona o rango es `[lower, upper)`: la primera empieza en 0, la última no
+tiene tope y un valor en la frontera cae en el intervalo superior. `zones.ts`
+valida que las zonas sean contiguas y cubran `[0, ∞)`, y lanza si hay huecos,
+solapes o si la última tiene tope.
+
+Consecuencia comprobada por test: la suma de segundos de todas las zonas es
+igual a `classified_seconds`, y `classified_seconds + unclassified_seconds` es
+igual a `valid_seconds`. Los segundos válidos sin valor de la señal van a
+`unclassified_seconds` en vez de desaparecer.
+
+### D22. `work_kj` en work-above-ftp: total y excedente
+
+`work_kj` por rango es ambiguo. Se devuelven ambos:
+- `work_kj`: trabajo total en esos segundos, `Σ P / 1000`, coherente con el resto
+  del proyecto.
+- `work_above_ftp_kj`: solo el excedente, `Σ (P − FTP) / 1000`, que es lo que el
+  nombre de la herramienta sugiere.
+
+### D23. Esfuerzos: microcortes y tramos no válidos
+
+`gap_tolerance_s` (2 s por defecto) evita que un segundo flojo parta un intervalo
+de 5 min en dos esfuerzos. La duración del esfuerzo cuenta solo sus segundos
+dentro del rango, no los del microcorte.
+
+Un tramo NO VÁLIDO siempre rompe el esfuerzo, por larga que sea la tolerancia: en
+un hueco sin muestras no sabemos qué pasó, y unir los dos lados inventaría un
+esfuerzo continuo que quizá no existió.
+
+### D24. Disponibilidad parcial por señal y parámetro
+
+- Sin FC → desacople y zonas de FC no disponibles (`MISSING_HR`); potencia,
+  torque y work-above-ftp siguen.
+- Sin FTP → zonas relativas y work-above-ftp no disponibles (`MISSING_FTP`);
+  zonas ABSOLUTAS y torque/cadencia funcionan igual, sin reportar el error.
+- `crc-torque-cadence` no necesita FTP ni peso.
+- `crc-aerobic-decoupling` solo pide FTP si se usan filtros relativos a él.
