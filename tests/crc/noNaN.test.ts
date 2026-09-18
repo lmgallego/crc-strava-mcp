@@ -29,6 +29,7 @@ import {
     torqueCadenceTool,
     workAboveFtpTool,
 } from "../../src/crc/tools/physiologyTools.ts";
+import { detectClimbsTool } from "../../src/crc/tools/climbTools.ts";
 import { estimateFtpTool, estimateVo2maxTool } from "../../src/crc/tools/estimateTools.ts";
 import {
     analyzeCyclingActivityTool,
@@ -205,6 +206,26 @@ const ESCENARIOS: { nombre: string; preparar: () => Promise<void> }[] = [
         },
     },
     {
+        nombre: "parado: la distancia no avanza (pendiente 0/0)",
+        preparar: async () => {
+            const n = 1800;
+            const base = activity("1", {
+                n,
+                watts: Array.from({ length: n }, () => 150),
+                hr: Array.from({ length: n }, () => 120),
+                cadence: zeros(n),
+            });
+            // Distancia constante y altitud constante: dd = 0 en toda la serie.
+            base.aligned.distance = zeros(n);
+            base.aligned.altitude = Array.from({ length: n }, () => 100);
+            catalogo = { "1": base };
+            await writeProfile([
+                { metric: "ftp_w", value: 250, unit: "W", effective_from: "2026-01-01", source: "manual" },
+                { metric: "weight_kg", value: 72, unit: "kg", effective_from: "2026-01-01", source: "manual" },
+            ]);
+        },
+    },
+    {
         nombre: "sin ningún stream salvo tiempo",
         preparar: async () => {
             catalogo = { "1": activity("1", { watts: null, hr: null, cadence: null }) };
@@ -268,6 +289,10 @@ describe.each(ESCENARIOS)("sin NaN ni Infinity · $nombre", ({ preparar }) => {
             "estimate-ftp",
             await estimateFtpTool.execute({ mode: "activity", activityId: "1" }),
         );
+    });
+
+    it("crc-detect-climbs", async () => {
+        assertNoNonFinite("detect-climbs", await detectClimbsTool.execute({ activityId: "1" }));
     });
 
     it("crc-analyze-cycling-activity", async () => {

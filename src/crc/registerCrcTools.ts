@@ -4,6 +4,7 @@ import {
     getPerformanceProfileTool,
     setPerformanceProfileTool,
 } from "./tools/performanceProfileTools.js";
+import { detectClimbsTool } from "./tools/climbTools.js";
 import { estimateFtpTool, estimateVo2maxTool } from "./tools/estimateTools.js";
 import {
     analyzeCyclingActivityTool,
@@ -38,6 +39,7 @@ export function registerCrcTools(server: McpServer): void {
         estimateFtpTool,
         analyzeCyclingActivityTool,
         compareActivitiesTool,
+        detectClimbsTool,
     ];
     for (const tool of tools) {
         server.tool(tool.name, tool.description, tool.inputSchema.shape, tool.execute as never);

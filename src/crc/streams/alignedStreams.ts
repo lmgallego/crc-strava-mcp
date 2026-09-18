@@ -348,3 +348,51 @@ function projectBoolean(
 
     return { values, meta: { present: true, missing_samples: missing, filled_seconds: filled } };
 }
+
+/**
+ * Recorta `AlignedStreams` al intervalo [from, to] (índices de rejilla, ambos
+ * incluidos), conservando la correspondencia entre señales.
+ *
+ * Permite reutilizar las funciones de `analytics/` sobre un tramo concreto
+ * —una subida, un intervalo— sin reimplementar sus fórmulas.
+ */
+export function sliceAlignedStreams(
+    aligned: AlignedStreams,
+    from: number,
+    to: number,
+): AlignedStreams {
+    const n = aligned.time.length;
+    const a = Math.max(0, Math.min(from, n - 1));
+    const b = Math.max(a, Math.min(to, n - 1));
+    const len = b - a + 1;
+
+    const valid = aligned.valid.slice(a, b + 1);
+    const out: AlignedStreams = {
+        // El tramo recortado vuelve a empezar en 0; el desplazamiento se guarda
+        // en meta.start_offset_s para poder volver al tiempo original.
+        time: Array.from({ length: len }, (_, i) => i),
+        valid,
+        meta: {
+            ...aligned.meta,
+            start_offset_s: aligned.meta.start_offset_s + a,
+            grid_seconds: len,
+            valid_seconds: valid.reduce((s, v) => s + (v ? 1 : 0), 0),
+            gaps: aligned.meta.gaps
+                .filter((g) => g.to_s >= a && g.from_s <= b)
+                .map((g) => ({
+                    ...g,
+                    from_s: Math.max(g.from_s - a, 0),
+                    to_s: Math.min(g.to_s - a, len - 1),
+                    duration_s: Math.min(g.to_s, b) - Math.max(g.from_s, a) + 1,
+                })),
+        },
+    };
+
+    for (const name of NUMERIC_SIGNALS) {
+        const src = aligned[name];
+        if (src) out[name] = src.slice(a, b + 1);
+    }
+    if (aligned.moving) out.moving = aligned.moving.slice(a, b + 1);
+
+    return out;
+}

@@ -578,3 +578,99 @@ El test recorre las 12 tools CRC en cinco escenarios adversos —actividad enter
 0 W (que produce 0/0 en el VI), actividad de 1 segundo, FC a 0, perfil vacío y
 una actividad sin más stream que el tiempo— y comprueba el texto devuelto. 62
 comprobaciones, todas en verde.
+
+## Sprint 8 — Detección de subidas (18/09/2026) · primera de la v0.2
+
+Abre la v0.2 sobre la capa ya validada. Todo lo de CLAUDE.md sigue en pie:
+función pura en `analytics/`, cálculo determinista y sin interpretación.
+
+### D39. Los umbrales de qué es una subida son convención nuestra
+
+No existe una definición universal de "subida": cada plataforma usa la suya y
+ninguna la publica del todo. Estos son los valores por defecto y el razonamiento
+de cada uno. Todos son configurables por llamada, y viajan en
+`inputs.thresholds` de cada respuesta para que el resultado sea reproducible.
+
+| Umbral | Valor | Por qué |
+|---|---|---|
+| Desnivel mínimo | **30 m** | Por debajo, un repecho urbano o un paso elevado ya contaría como subida. 30 m es el orden de magnitud de un puente grande: lo mínimo que un ciclista recordaría como "una cuesta". |
+| Pendiente media mínima | **3 %** | Por debajo del 3 % la mayoría rueda en llano, sin cambiar de posición ni de desarrollo. Es también el suelo habitual de las escalas de puertos. |
+| Longitud mínima | **500 m** | Filtra rampas cortas que, con 30 m de desnivel, darían pendientes altas pero no son subidas: 30 m en 200 m es un muro de 15 %, no un puerto. |
+| Llano tolerado | **200 m seguidos** | Un puerto real tiene descansillos. 200 m a 20 km/h son unos 36 s: suficiente para un falso llano, corto para unir dos puertos distintos. |
+| Ventana de suavizado | **15 s** | Ver [D40](#d40-el-suavizado-tiene-un-coste-de-borde-medido). |
+| Banda muerta | **1 m** | Orden de magnitud del ruido del barómetro de Strava. |
+| Pendiente sostenida | **200 m** | La "pendiente máxima" instantánea de un barómetro es ruido; lo que describe una subida es el tramo más duro que se mantiene. |
+
+Además, el criterio de aceptación es conjunto: un tramo debe cumplir **los tres**
+mínimos (desnivel, longitud y pendiente media). Con eso, el falso llano de una
+subida real no la parte pero tampoco permite que un llano larguísimo con un
+repecho al final pase por puerto.
+
+Un tramo NO VÁLIDO rompe la subida, igual que rompe un esfuerzo en
+[D23](#d23-esfuerzos-microcortes-y-tramos-no-válidos): en un hueco sin muestras
+no se sabe qué pasó, y unir los dos lados inventaría una subida continua.
+
+### D40. El suavizado tiene un coste de borde, medido
+
+El barómetro tiene ruido, así que la altitud se suaviza antes de derivar
+pendientes. Dos detalles:
+
+- **Media móvil centrada con ventana simétrica truncada.** La simetría no es un
+  capricho: sobre una rampa constante devuelve la rampa exacta, bordes incluidos,
+  así que suavizar no altera la pendiente de una subida real. Solo aplana el
+  ruido.
+- **Banda muerta de 1 m en el desnivel acumulado.** Sumar toda diferencia
+  positiva sobre una señal ruidosa inventa desnivel: la fixture `13-llano-ruido`
+  lo demuestra, un perfil completamente plano con ±1,5 m de ruido acumula más de
+  100 m falsos sin filtrar, y menos de una décima parte con suavizado y banda
+  muerta.
+
+**Coste medido.** El suavizado difumina el codo del perfil, así que el tramo
+detectado no coincide exactamente con la rampa construida. Sobre
+`10-subida-limpia` (5 km al 6 %, de t=200 a t=1200):
+
+| Suavizado | Tramo detectado | Distancia | Potencia media |
+|---|---|---|---|
+| 15 s (por defecto) | 204 → 1205 | 5005 m (+0,1 %) | 299,1 W (real 300) |
+| 5 s | 204 → 1202 | 4990 m | 299,6 W |
+| 1 s | 204 → 1200 | 4980 m | 299,9 W |
+
+Se conservan los 15 s: en datos reales el ruido pesa mucho más que ese 0,1 %. El
+sesgo queda **cuantificado en un test** (`el error de borde del suavizado se
+mantiene por debajo del 1 %`) en vez de ignorado, de modo que si un cambio futuro
+lo empeora, salta.
+
+Se añadió un recorte de bordes que descarta los extremos donde la altitud
+suavizada no sube. Reduce el arrastre pero no lo elimina, porque el difuminado
+del codo es inherente a la media móvil.
+
+### D41. La escala de dificultad es propia y se dice en cada respuesta
+
+`difficulty_score = distancia_km × pendiente_media_%`, con cortes en 6, 16, 40 y
+80 para `corta`, `suave`, `media`, `dura` y `muy dura`.
+
+El producto distancia × pendiente es la idea que sustenta la mayoría de escalas
+de puertos, pero **los cortes son nuestros**. Cada subida incluye
+`difficulty_scale` con un texto que dice literalmente que NO es la categorización
+oficial de la UCI ni de ninguna otra organización, y las etiquetas son palabras
+comunes, no "HC" ni "categoría 1", para que nadie las confunda. Hay un test que
+falla si la etiqueta empieza a parecerse a una categoría oficial.
+
+### D42. `MISSING_ELEVATION`: primer código de error fuera de la sección 12
+
+La sección 12 de la v0.1 define siete códigos y ninguno cubre "falta altitud".
+Se añade `MISSING_ELEVATION` al enum, marcado en el código como ampliación de la
+v0.2.
+
+Para que la lista original siga siendo verificable, se exporta
+`SPEC_V01_ERROR_CODES` con los siete de la especificación, y hay dos tests: uno
+comprueba que los siete siguen presentes, y otro que las ampliaciones son
+exactamente las esperadas. Así el enum puede crecer sin que se pierda de vista
+qué venía del documento y qué añadimos después.
+
+### D43. `sliceAlignedStreams`, para no reimplementar NP por subida
+
+Cada subida necesita su potencia media y su NP. En vez de recalcularlos, se
+recorta el tramo con `sliceAlignedStreams` y se pasa a `computePowerMetrics`. El
+helper conserva la correspondencia entre señales y ajusta `start_offset_s`, de
+modo que los tiempos siguen refiriéndose a la actividad original.

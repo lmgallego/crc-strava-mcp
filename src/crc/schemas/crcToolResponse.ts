@@ -6,7 +6,10 @@ import { z } from "zod";
  * `NaN` ni `Infinity`.
  */
 
-/** Códigos de error de la sección 12 de la especificación. */
+/**
+ * Códigos de error de la sección 12 de la especificación, más las ampliaciones
+ * posteriores (marcadas como tales).
+ */
 export const CrcErrorCode = {
     MISSING_POWER: "MISSING_POWER",
     MISSING_HR: "MISSING_HR",
@@ -15,7 +18,23 @@ export const CrcErrorCode = {
     INSUFFICIENT_DURATION: "INSUFFICIENT_DURATION",
     LOW_COVERAGE: "LOW_COVERAGE",
     INVALID_PROFILE: "INVALID_PROFILE",
+    /**
+     * Ampliación de la v0.2 (Sprint 8): no está en la sección 12 de la v0.1.
+     * Falta altitud o distancia, así que no se pueden detectar subidas.
+     */
+    MISSING_ELEVATION: "MISSING_ELEVATION",
 } as const;
+
+/** Los siete códigos originales de la sección 12, sin las ampliaciones. */
+export const SPEC_V01_ERROR_CODES = [
+    "MISSING_POWER",
+    "MISSING_HR",
+    "MISSING_FTP",
+    "MISSING_WEIGHT",
+    "INSUFFICIENT_DURATION",
+    "LOW_COVERAGE",
+    "INVALID_PROFILE",
+] as const;
 
 export type CrcErrorCode = (typeof CrcErrorCode)[keyof typeof CrcErrorCode];
 

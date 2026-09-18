@@ -6,6 +6,7 @@ import {
     crcToolResponseSchema,
     crcUnavailable,
     sanitize,
+    SPEC_V01_ERROR_CODES,
 } from "../../src/crc/schemas/crcToolResponse.ts";
 
 describe("sanitize", () => {
@@ -118,16 +119,18 @@ describe("crcUnavailable", () => {
     });
 
     it("expone los 7 códigos de la sección 12", () => {
-        expect(Object.keys(CrcErrorCode).sort()).toEqual(
-            [
-                "INSUFFICIENT_DURATION",
-                "INVALID_PROFILE",
-                "LOW_COVERAGE",
-                "MISSING_FTP",
-                "MISSING_HR",
-                "MISSING_POWER",
-                "MISSING_WEIGHT",
-            ].sort(),
+        // Siguen estando todos, aunque el enum haya crecido con ampliaciones.
+        for (const code of SPEC_V01_ERROR_CODES) {
+            expect(Object.keys(CrcErrorCode)).toContain(code);
+        }
+        expect(SPEC_V01_ERROR_CODES).toHaveLength(7);
+    });
+
+    it("las ampliaciones posteriores están identificadas", () => {
+        const ampliaciones = Object.keys(CrcErrorCode).filter(
+            (c) => !SPEC_V01_ERROR_CODES.includes(c as (typeof SPEC_V01_ERROR_CODES)[number]),
         );
+        // v0.2: MISSING_ELEVATION para la detección de subidas.
+        expect(ampliaciones).toEqual(["MISSING_ELEVATION"]);
     });
 });

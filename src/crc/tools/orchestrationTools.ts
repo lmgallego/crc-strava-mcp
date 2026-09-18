@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 
+import { detectClimbs } from "../analytics/climbDetection.js";
 import { computeDecoupling } from "../analytics/decoupling.js";
 import { computePowerMetrics } from "../analytics/powerMetrics.js";
 import { summariseHrAndCadence } from "../analytics/streamSummary.js";
@@ -198,6 +199,21 @@ export const analyzeCyclingActivityTool = {
                         : "Sin FC no hay desacople.",
                 );
             }
+
+            // 6) Subidas: necesitan altitud y distancia.
+            const climbs = detectClimbs(activity.aligned, {
+                ftpW: p.ftp,
+                weightKg: p.weight,
+            });
+            modules["climbs"] = climbs.available
+                ? {
+                      available: true,
+                      climb_count: climbs.climb_count,
+                      total_elevation_gain_m: climbs.total_elevation_gain_m,
+                      climbs: climbs.climbs,
+                      thresholds: climbs.thresholds,
+                  }
+                : unavailableModule(climbs.reason ?? "No calculable.");
 
             // Se agregan las advertencias de cada módulo en un solo bloque.
             for (const [name, mod] of Object.entries(modules)) {

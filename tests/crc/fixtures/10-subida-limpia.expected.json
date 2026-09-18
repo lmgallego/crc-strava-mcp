@@ -1,0 +1,32 @@
+{
+  "fixture": "10-subida-limpia",
+  "description": "1 km llano, 5 km al 6 % (300 m de desnivel) y 1 km llano. Una sola subida.",
+  "inputs": {
+    "weight_kg": 72.0,
+    "speed_m_s": 5.0,
+    "noise_m": 0.0
+  },
+  "expected": {
+    "climb_count": 1,
+    "climbs": [
+      {
+        "start_time_s": 200,
+        "end_time_s": 1200,
+        "distance_m": 5000,
+        "elevation_gain_m": 300.0,
+        "avg_grade_pct": 6.0,
+        "duration_s": 1000,
+        "vam_m_per_h": 1080.0,
+        "difficulty_score": 30.0
+      }
+    ],
+    "total_elevation_gain_m": 300.0
+  },
+  "method": {
+    "derivation": "valores derivados de la construccion del perfil, no del detector",
+    "gain": "desnivel = longitud * pendiente, por construccion",
+    "vam": "desnivel / (duracion_h)",
+    "score": "distancia_km * pendiente_media_% (escala propia CRC)"
+  },
+  "notes": "Caso base. 5000 m x 6 % = 300 m. VAM = 300 / (1000 s / 3600) = 1080 m/h. Score = 5 x 6 = 30 -> 'media'."
+}

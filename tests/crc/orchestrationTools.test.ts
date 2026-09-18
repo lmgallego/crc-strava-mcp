@@ -37,7 +37,11 @@ vi.mock("../../src/crc/profile/profileStore.ts", async (importOriginal) => {
     return { ...actual, loadProfile: (f?: string) => actual.loadProfile(f ?? profileFile) };
 });
 
-/** Actividad sintética de 30 min a 200 W, 90 rpm, FC 140->150. */
+/**
+ * Actividad sintética de 30 min a 200 W, 90 rpm, FC 140->150, con un perfil de
+ * altitud que incluye una subida al 6 % en la primera mitad (para que el módulo
+ * de subidas tenga datos con los que trabajar).
+ */
 function makeActivity(
     id: string,
     opts: {
@@ -46,6 +50,7 @@ function makeActivity(
         watts?: boolean;
         hr?: boolean;
         cadence?: boolean;
+        elevation?: boolean;
         power?: number;
         deviceWatts?: boolean | null;
     } = {},
@@ -56,6 +61,11 @@ function makeActivity(
     const watts = Array.from({ length: n }, () => power);
     const cadence = Array.from({ length: n }, () => 90);
     const hr = Array.from({ length: n }, (_, i) => (i < n / 2 ? 140 : 150));
+    // 5 m/s. Sube al 6 % la primera mitad y llanea el resto.
+    const distance = Array.from({ length: n }, (_, i) => i * 5);
+    const altitude = Array.from({ length: n }, (_, i) =>
+        i < n / 2 ? 100 + i * 5 * 0.06 : 100 + (n / 2) * 5 * 0.06,
+    );
 
     return {
         activity_id: id,
@@ -75,6 +85,8 @@ function makeActivity(
             watts: opts.watts === false ? undefined : watts,
             heartrate: opts.hr === false ? undefined : hr,
             cadence: opts.cadence === false ? undefined : cadence,
+            distance: opts.elevation === false ? undefined : distance,
+            altitude: opts.elevation === false ? undefined : altitude,
         }),
         from_cache: false,
         available_types: ["time", "watts", "heartrate", "cadence"],
@@ -134,6 +146,8 @@ describe("crc-analyze-cycling-activity", () => {
         expect(m.power_zones.available).toBe(true);
         expect(m.heartrate_zones.available).toBe(true);
         expect(m.decoupling.available).toBe(true);
+        expect(m.climbs.available).toBe(true);
+        expect(m.climbs.climb_count).toBeGreaterThan(0);
         expect(r.quality.modules_available).toBe(r.quality.modules_total);
     });
 
@@ -205,6 +219,17 @@ describe("crc-analyze-cycling-activity", () => {
 
         expect(r.quality.ftp_estimated).toBe(true);
         expect(r.quality.warnings.join(" ")).toContain("ESTIMACIÓN");
+    });
+
+    it("sin altitud, el módulo de subidas queda no disponible y el resto sigue", async () => {
+        catalogo["1"] = makeActivity("1", { elevation: false });
+        const r = parse(await analyzeCyclingActivityTool.execute({ activityId: "1" }));
+
+        expect(r.metrics.modules.climbs.available).toBe(false);
+        expect(r.metrics.modules.climbs.reason).toContain("altitud");
+        expect(r.metrics.modules.power_metrics.available).toBe(true);
+        expect(r.metrics.modules.decoupling.available).toBe(true);
+        expect(r.available).toBe(true);
     });
 
     it("una actividad sin potencia mantiene FC y cadencia", async () => {

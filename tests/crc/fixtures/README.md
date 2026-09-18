@@ -34,6 +34,26 @@ Metodo declarado para el desacople:
 - decoupling_pct = (EF1 - EF2) / EF1 * 100.
 - Los filtros se aplican ANTES de partir en mitades.
 
+## Deteccion de subidas (10-13) · v0.2
+
+Perfiles de altitud construidos a proposito, a 5 m/s constantes para que
+distancia y tiempo sean intercambiables (`distancia_m = t * 5`).
+
+| Fixture | Que valida |
+|---|---|
+| 10-subida-limpia | 1 km llano, 5 km al 6 % y 1 km llano. Caso base: 300 m de desnivel, VAM 1080 m/h, score 30. |
+| 11-falso-llano | 2 km al 6 %, 150 m de falso llano y otros 2 km al 6 %. Debe salir UNA subida: el llano no llega a los 200 m de tolerancia. Con `maxFlatRunM: 50` si se parte en dos. |
+| 12-dos-subidas | Dos tramos de 2 km al 6 % separados por 1,5 km de descenso. Deben salir DOS subidas de 120 m cada una. |
+| 13-llano-ruido | 10 km planos con +/- 1,5 m de ruido barometrico. No debe detectarse ninguna subida: todo el desnivel posible viene del ruido. |
+
+Los valores esperados salen de la CONSTRUCCION del perfil (se sabe cuantos
+metros se han subido porque se han puesto ahi), no de ejecutar el detector.
+
+Nota sobre los bordes: el suavizado de 15 s difumina el codo del perfil, asi que
+el tramo detectado se desplaza unos segundos respecto al construido (~0,1 % en
+distancia). Esta medido y documentado en D40; los tests lo acotan en lugar de
+ignorarlo.
+
 ## Barrido temporal (09)
 
 Referencia temporal fija: `now = 2026-09-17`, asi que la ventana de 90 dias
@@ -48,4 +68,5 @@ respectivamente, el de `device_watts` o el de la ventana temporal.
 `generador-fixtures.py` reproduce los casos 01-05 y sus valores esperados.
 `generador-fixtures-desacople.py` reproduce los casos 06-08.
 `generador-fixtures-periodo.py` reproduce el caso 09.
+`generador-fixtures-subidas.py` reproduce los casos 10-13.
 Si se cambia el metodo de calculo, se regeneran y se documenta el cambio.

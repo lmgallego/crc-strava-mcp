@@ -1,0 +1,31 @@
+{
+  "fixture": "11-falso-llano",
+  "description": "2 km al 6 %, 150 m de falso llano y otros 2 km al 6 %. Debe salir UNA subida, no dos: el llano no llega a los 200 m de tolerancia.",
+  "inputs": {
+    "weight_kg": 72.0,
+    "speed_m_s": 5.0,
+    "noise_m": 0.0
+  },
+  "expected": {
+    "climb_count": 1,
+    "climbs": [
+      {
+        "start_time_s": 200,
+        "distance_m": 4150,
+        "elevation_gain_m": 240.0,
+        "avg_grade_pct": 5.78,
+        "duration_s": 830,
+        "vam_m_per_h": 1041.0,
+        "difficulty_score": 24.0
+      }
+    ],
+    "total_elevation_gain_m": 240.0
+  },
+  "method": {
+    "derivation": "valores derivados de la construccion del perfil, no del detector",
+    "gain": "desnivel = longitud * pendiente, por construccion",
+    "vam": "desnivel / (duracion_h)",
+    "score": "distancia_km * pendiente_media_% (escala propia CRC)"
+  },
+  "notes": "El llano de 150 m esta por debajo de max_flat_run_m (200), asi que no rompe la subida. La pendiente media baja a 240/4150 = 5,78 %, que sigue por encima del 3 %."
+}

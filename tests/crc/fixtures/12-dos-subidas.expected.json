@@ -1,0 +1,42 @@
+{
+  "fixture": "12-dos-subidas",
+  "description": "2 km al 6 %, 1,5 km de descenso al -4 % y otros 2 km al 6 %. Deben salir DOS subidas.",
+  "inputs": {
+    "weight_kg": 72.0,
+    "speed_m_s": 5.0,
+    "noise_m": 0.0
+  },
+  "expected": {
+    "climb_count": 2,
+    "climbs": [
+      {
+        "start_time_s": 200,
+        "end_time_s": 600,
+        "distance_m": 2000,
+        "elevation_gain_m": 120.0,
+        "avg_grade_pct": 6.0,
+        "duration_s": 400,
+        "vam_m_per_h": 1080.0,
+        "difficulty_score": 12.0
+      },
+      {
+        "start_time_s": 900,
+        "end_time_s": 1300,
+        "distance_m": 2000,
+        "elevation_gain_m": 120.0,
+        "avg_grade_pct": 6.0,
+        "duration_s": 400,
+        "vam_m_per_h": 1080.0,
+        "difficulty_score": 12.0
+      }
+    ],
+    "total_elevation_gain_m": 240.0
+  },
+  "method": {
+    "derivation": "valores derivados de la construccion del perfil, no del detector",
+    "gain": "desnivel = longitud * pendiente, por construccion",
+    "vam": "desnivel / (duracion_h)",
+    "score": "distancia_km * pendiente_media_% (escala propia CRC)"
+  },
+  "notes": "El descenso de 1500 m supera con creces los 200 m de tolerancia, asi que parte el tramo en dos subidas de 120 m de desnivel cada una."
+}

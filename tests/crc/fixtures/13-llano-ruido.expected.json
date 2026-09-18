@@ -1,0 +1,21 @@
+{
+  "fixture": "13-llano-ruido",
+  "description": "10 km completamente llanos con +/- 1,5 m de ruido barometrico. No debe detectarse ninguna subida.",
+  "inputs": {
+    "weight_kg": 72.0,
+    "speed_m_s": 5.0,
+    "noise_m": 1.5
+  },
+  "expected": {
+    "climb_count": 0,
+    "climbs": [],
+    "total_elevation_gain_m": 0.0
+  },
+  "method": {
+    "derivation": "valores derivados de la construccion del perfil, no del detector",
+    "gain": "desnivel = longitud * pendiente, por construccion",
+    "vam": "desnivel / (duracion_h)",
+    "score": "distancia_km * pendiente_media_% (escala propia CRC)"
+  },
+  "notes": "El perfil real es plano: todo el desnivel que pudiera acumularse viene del ruido. Si el detector encuentra una subida aqui, esta inventando desnivel."
+}
