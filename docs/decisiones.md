@@ -746,3 +746,33 @@ en todas.
 para la página de alta. Al revisarlo aparecieron cuatro páginas más sin traducir
 (éxito, error, redirección y credenciales ya guardadas): una pantalla en inglés
 en mitad de un flujo en español es peor que todo en inglés.
+
+### D55. `prebuild` limpia `dist/` · no lo quites: hubo un caso real
+
+`npm run build` ejecuta antes `prebuild`, que borra `dist/` entero.
+
+**El incidente.** En el primer `npm publish --dry-run` de la 0.1.0, el tarball
+**incluía `climbDetection.js` y `climbTools.js`**, código de la v0.2 que no
+existe en la rama de distribución. Se atajó borrando `dist/` a mano antes de
+publicar, así que la publicación salió limpia, pero el paquete estuvo a un
+comando de llevar código que esa versión no declara.
+
+**Por qué pasa.** `tsc` compila lo que encuentra, pero **no borra los `.js`
+huérfanos**. Al cambiar de rama, los ficheros fuente desaparecen del árbol y sus
+compilados se quedan en `dist/` indefinidamente. Como `files` publica `dist`
+entero, cualquier resto viaja al paquete. Y es invisible en las comprobaciones
+habituales: el servidor seguía anunciando 38 herramientas, porque
+`registerCrcTools.js` recompilado ya no las registraba. Los ficheros estaban
+ahí, inertes, sin que ningún test ni el snapshot de `tools/list` los delatara.
+
+**Por qué no `rimraf`.** Estaba en `node_modules`, pero solo como dependencia
+**transitiva**, no declarada: el build se habría roto en silencio el día que el
+paquete que la arrastra dejara de hacerlo, o en un `npm ci` limpio de CI. Se usa
+`node -e "require('fs').rmSync('dist',{recursive:true,force:true})"`: stdlib,
+funciona en Windows y no añade ninguna dependencia.
+
+**Si alguien se plantea quitarlo** porque «solo borra una carpeta que tsc va a
+regenerar»: esta entrada existe precisamente por eso. No es una precaución
+teórica, es la respuesta a un tarball que ya salió mal una vez. El coste de
+mantenerlo es un borrado de carpeta por compilación; el de quitarlo, publicar
+código que la versión no declara.
