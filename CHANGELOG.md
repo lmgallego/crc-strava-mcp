@@ -9,6 +9,23 @@ Este proyecto es un fork de [r-huijts/strava-mcp](https://github.com/r-huijts/st
 que añade una capa analítica determinista (CRC). La numeración arranca de nuevo
 en 0.1.0 porque el alcance y el contrato son distintos.
 
+## [0.1.1] - 2026-09-18
+
+Retoques de la interfaz de conexión, que es la primera pantalla que ve un
+usuario nuevo. Sin cambios funcionales: ninguna herramienta cambia.
+
+### Cambiado
+
+- Toda la interfaz de conexión pasa a estar en español. Estaban sin traducir
+  las páginas de éxito, error, redirección y credenciales ya guardadas.
+- Los emojis de los iconos se sustituyen por SVG de trazo dibujados a mano, en
+  el naranja de la propia paleta: un icono de enlace en el alta y un check
+  dentro de un círculo al terminar. Van en línea en el HTML, sin librerías ni
+  fuentes externas, para que la página funcione sin conexión.
+- La página de alta explica por qué hace falta una aplicación propia de Strava:
+  la plataforma exige credenciales por usuario y así los datos no pasan por
+  ningún servidor intermedio.
+
 ## [0.1.0] - 2026-09-18
 
 Primera versión publicable. Añade 12 herramientas CRC sobre las 26 originales

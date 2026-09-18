@@ -722,3 +722,27 @@ Metadatos actualizados al fork, que apuntaban todos al repositorio original:
 `repository.url`, `homepage`, `bugs`, `author` y `mcpName` en `package.json`, y
 `name`, `repository`, `description` e `identifier` del paquete npm en
 `server.json` (este último aún declaraba `@r-huijts/strava-mcp-server`).
+
+### D53. Iconos SVG en línea, no emojis ni librería de iconos
+
+Los emojis de las páginas de conexión (🚴, ✅, ❌, 🏃‍♂️) se sustituyen por SVG de
+trazo escritos a mano en el HTML, con el naranja de la paleta (`#fc4c02`).
+
+Por qué a mano y no una librería: la página se sirve desde `localhost` durante
+el alta, cuando el usuario todavía no tiene nada configurado. Una dependencia de
+CDN fallaría justo ahí si no hay conexión, y meter una fuente de iconos en el
+paquete engorda la descarga para cuatro dibujos.
+
+El icono de error es la excepción al naranja: usa el rojo de los avisos
+(`#fca5a5`), porque un error en el color de marca no se lee como error.
+
+Ventaja secundaria de los emojis que se pierde y no importa: el emoji depende de
+la fuente del sistema y se veía distinto en cada plataforma. El SVG se ve igual
+en todas.
+
+### D54. Toda la interfaz de conexión en español
+
+[D51](#d51-la-página-de-alta-está-en-español-a-propósito) decidió el español
+para la página de alta. Al revisarlo aparecieron cuatro páginas más sin traducir
+(éxito, error, redirección y credenciales ya guardadas): una pantalla en inglés
+en mitad de un flujo en español es peor que todo en inglés.

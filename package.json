@@ -1,6 +1,6 @@
 {
   "name": "crc-strava-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Servidor MCP para Strava con capa analitica determinista (CRC): NP, IF, TSS, curvas de potencia, desacople, zonas y VO2max estimado.",
   "mcpName": "io.github.lmgallego/crc-strava-mcp",
   "repository": {

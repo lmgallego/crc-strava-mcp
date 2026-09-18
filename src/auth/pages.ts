@@ -117,6 +117,7 @@ const baseStyles = `
         text-align: center;
         margin-bottom: 20px;
     }
+    .icon { display: block; width: 64px; height: 64px; margin: 0 auto 20px; }
     .error-message {
         background: rgba(220, 38, 38, 0.2);
         border: 1px solid rgba(220, 38, 38, 0.3);
@@ -127,6 +128,36 @@ const baseStyles = `
     }
 `;
 
+
+/**
+ * Iconos SVG en linea, dibujados a mano.
+ *
+ * Sin librerias ni fuentes externas: la pagina de alta se sirve desde localhost
+ * y tiene que funcionar sin conexion. Trazo en el naranja de la propia paleta
+ * (#fc4c02), salvo el de error, que usa el rojo de los avisos porque un error
+ * en naranja no se lee como error.
+ */
+const ICON_LINK = `
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fc4c02" stroke-width="1.5"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+</svg>`;
+
+const ICON_CHECK = `
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fc4c02" stroke-width="1.5"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9.25" />
+    <path d="m8 12.3 2.7 2.7L16 9.7" />
+</svg>`;
+
+const ICON_ALERT = `
+<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="1.5"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9.25" />
+    <path d="M12 7.5v5.25" />
+    <path d="M12 16.25h.01" />
+</svg>`;
 
 /** Estilos de la guía de alta: pasos numerados y bloque copiable. */
 const setupStyles = `
@@ -192,9 +223,13 @@ export function setupPage(error?: string): string {
 </head>
 <body>
     <div class="container">
-        <div class="logo">🚴</div>
+        ${ICON_LINK}
         <h1>Conectar con Strava</h1>
-        <p>Necesitas una aplicación propia en Strava. Es gratis y se tarda un minuto.</p>
+        <p>
+            Necesitas una aplicación propia en Strava. Es gratis y se tarda un minuto:
+            Strava exige que cada usuario use sus propias credenciales, y así tus datos
+            no pasan por ningún servidor nuestro.
+        </p>
         ${errorHtml}
 
         <ol class="steps">
@@ -261,23 +296,25 @@ export function setupPage(error?: string): string {
  * Success page - shown after successful authentication
  */
 export function successPage(athleteName?: string): string {
-    const greeting = athleteName ? `Welcome, ${escapeHtml(athleteName)}!` : 'Authentication successful!';
+    const greeting = athleteName
+        ? `¡Hola, ${escapeHtml(athleteName)}!`
+        : '¡Cuenta conectada!';
     
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connected to Strava!</title>
+    <title>Conectado con Strava</title>
     <style>${baseStyles}</style>
 </head>
 <body>
     <div class="container">
-        <div class="success-icon">✅</div>
+        ${ICON_CHECK}
         <h1>${greeting}</h1>
-        <p>Your Strava account is now connected. You can close this tab and return to your chat.</p>
-        <p style="font-size: 14px; color: #666;">
-            Try saying "Show me my recent activities" to get started!
+        <p>Tu cuenta de Strava ya está conectada. Puedes cerrar esta pestaña y volver al chat.</p>
+        <p style="font-size: 14px; color: #a0a0a0;">
+            Para empezar, prueba a pedir «analiza mi última salida en bici».
         </p>
     </div>
     <script>
@@ -297,20 +334,20 @@ export function errorPage(message: string, details?: string): string {
     const detailsHtml = details ? `<p class="help-text">${escapeHtml(details)}</p>` : '';
     
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connection Failed</title>
+    <title>No se pudo conectar</title>
     <style>${baseStyles}</style>
 </head>
 <body>
     <div class="container">
-        <div class="error-icon">❌</div>
-        <h1>Connection Failed</h1>
+        ${ICON_ALERT}
+        <h1>No se pudo conectar</h1>
         <div class="error-message">${escapeHtml(message)}</div>
         ${detailsHtml}
-        <button onclick="window.location.href='/setup?reset=true'">Try Again</button>
+        <button onclick="window.location.href='/setup?reset=true'">Volver a intentarlo</button>
     </div>
 </body>
 </html>`;
@@ -321,11 +358,11 @@ export function errorPage(message: string, details?: string): string {
  */
 export function waitingPage(): string {
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authorizing...</title>
+    <title>Autorizando…</title>
     <style>
         ${baseStyles}
         .spinner {
@@ -345,8 +382,8 @@ export function waitingPage(): string {
 <body>
     <div class="container">
         <div class="spinner"></div>
-        <h1>Redirecting to Strava...</h1>
-        <p>Please authorize the application in the Strava window.</p>
+        <h1>Redirigiendo a Strava…</h1>
+        <p>Autoriza la aplicación en la ventana de Strava.</p>
     </div>
 </body>
 </html>`;
@@ -359,11 +396,11 @@ export function waitingPage(): string {
 export function credentialsExistPage(clientId: string): string {
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect Strava</title>
+    <title>Conectar con Strava</title>
     <style>
         ${baseStyles}
         .btn-secondary {
@@ -389,12 +426,12 @@ export function credentialsExistPage(clientId: string): string {
 </head>
 <body>
     <div class="container">
-        <div class="logo">🏃‍♂️</div>
-        <h1>Connect to Strava</h1>
-        <p>You already have saved API credentials.</p>
+        ${ICON_LINK}
+        <h1>Conectar con Strava</h1>
+        <p>Ya tienes guardadas las credenciales de tu aplicación de Strava.</p>
         <div class="credential-info">Client ID: ${escapeHtml(clientId)}</div>
-        <button onclick="window.location.href='/auth'">Continue to Strava →</button>
-        <button class="btn-secondary" onclick="window.location.href='/setup?reset=true'">Re-enter credentials</button>
+        <button onclick="window.location.href='/auth'">Continuar a Strava →</button>
+        <button class="btn-secondary" onclick="window.location.href='/setup?reset=true'">Introducir otras credenciales</button>
     </div>
 </body>
 </html>`;
