@@ -127,42 +127,132 @@ const baseStyles = `
     }
 `;
 
+
+/** Estilos de la guía de alta: pasos numerados y bloque copiable. */
+const setupStyles = `
+    .steps {
+        text-align: left;
+        margin: 0 0 24px;
+        padding-left: 20px;
+        line-height: 1.6;
+    }
+    .steps li { margin-bottom: 14px; }
+    .copy-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0 6px;
+        flex-wrap: wrap;
+    }
+    .copy-row code {
+        flex: 1 1 auto;
+        min-width: 140px;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 16px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        user-select: all;
+    }
+    .copy-btn {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0;
+        padding: 10px 16px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    .warn {
+        font-size: 13px;
+        opacity: 0.85;
+        margin: 4px 0 0;
+    }
+    .warn code, .help-text code {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+`;
+
 /**
  * Setup page - form for entering Client ID and Client Secret
  */
 export function setupPage(error?: string): string {
     const errorHtml = error ? `<div class="error-message">${escapeHtml(error)}</div>` : '';
-    
+
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect Strava - Setup</title>
-    <style>${baseStyles}</style>
+    <title>Conectar con Strava · CRC</title>
+    <style>${baseStyles}${setupStyles}</style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">🏃‍♂️</div>
-        <h1>Connect to Strava</h1>
-        <p>Enter your Strava API credentials to connect your account.</p>
+        <div class="logo">🚴</div>
+        <h1>Conectar con Strava</h1>
+        <p>Necesitas una aplicación propia en Strava. Es gratis y se tarda un minuto.</p>
         ${errorHtml}
+
+        <ol class="steps">
+            <li>
+                Abre <a href="https://www.strava.com/settings/api" target="_blank" rel="noopener">strava.com/settings/api</a>
+                y rellena el formulario de tu aplicación.
+            </li>
+            <li>
+                En <strong>Authorization Callback Domain</strong> escribe exactamente esto:
+                <div class="copy-row">
+                    <code id="domain">localhost</code>
+                    <button type="button" class="copy-btn" onclick="copiarDominio()">Copiar</button>
+                </div>
+                <p class="warn">
+                    Solo <code>localhost</code>. Sin <code>http://</code> y sin <code>:8111</code>:
+                    es el campo donde más gente se equivoca y Strava rechaza la conexión.
+                </p>
+            </li>
+            <li>Copia el <strong>Client ID</strong> y el <strong>Client Secret</strong> que te dará Strava y pégalos aquí abajo.</li>
+        </ol>
+
         <form method="POST" action="/setup">
             <div class="form-group">
                 <label for="clientId">Client ID</label>
-                <input type="text" id="clientId" name="clientId" placeholder="Your Strava Client ID" required>
+                <input type="text" id="clientId" name="clientId" placeholder="Por ejemplo: 123456" required>
             </div>
             <div class="form-group">
                 <label for="clientSecret">Client Secret</label>
-                <input type="password" id="clientSecret" name="clientSecret" placeholder="Your Strava Client Secret" required>
+                <input type="password" id="clientSecret" name="clientSecret" placeholder="La cadena larga que muestra Strava" required>
             </div>
-            <button type="submit">Continue to Strava →</button>
+            <button type="submit">Continuar a Strava →</button>
             <p class="help-text">
-                Don't have API credentials? 
-                <a href="https://www.strava.com/settings/api" target="_blank">Create a Strava App</a>
+                Tus credenciales se guardan solo en tu ordenador, en
+                <code>~/.config/strava-mcp/config.json</code>. No se envían a ningún sitio.
             </p>
         </form>
     </div>
+    <script>
+        function copiarDominio() {
+            const texto = document.getElementById('domain').textContent;
+            const boton = document.querySelector('.copy-btn');
+            const hecho = () => { boton.textContent = '¡Copiado!'; setTimeout(() => { boton.textContent = 'Copiar'; }, 1500); };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(texto).then(hecho).catch(seleccionar);
+            } else {
+                seleccionar();
+            }
+            function seleccionar() {
+                // Sin portapapeles disponible: al menos se deja seleccionado.
+                const rango = document.createRange();
+                rango.selectNodeContents(document.getElementById('domain'));
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(rango);
+                try { document.execCommand('copy'); hecho(); } catch (e) { boton.textContent = 'Copia a mano'; }
+            }
+        }
+    </script>
 </body>
 </html>`;
 }

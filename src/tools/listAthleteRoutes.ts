@@ -1,5 +1,6 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { z } from "zod";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 import {
     listAthleteRoutes as fetchAthleteRoutes,
     StravaRoute,
@@ -40,7 +41,7 @@ export const listAthleteRoutesTool = {
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN in .env");
             return {
-                content: [{ type: "text" as const, text: "❌ Configuration Error: STRAVA_ACCESS_TOKEN is missing or not set in the .env file." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true
             };
         }

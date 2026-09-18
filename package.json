@@ -1,7 +1,7 @@
 {
-  "name": "@crc/strava-mcp-server",
+  "name": "crc-strava-mcp",
   "version": "0.1.0-crc.0",
-  "description": "MCP server for Strava API",
+  "description": "Servidor MCP para Strava con capa analitica determinista (CRC): NP, IF, TSS, curvas de potencia, desacople, zonas y VO2max estimado.",
   "mcpName": "io.github.r-huijts/strava-mcp",
   "repository": {
     "type": "git",
@@ -9,14 +9,15 @@
   },
   "main": "dist/server.js",
   "bin": {
+    "crc-strava-mcp": "./dist/server.js",
     "strava-mcp-server": "./dist/server.js"
   },
   "type": "module",
   "files": [
     "dist",
-    "scripts",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -34,14 +35,19 @@
   "keywords": [
     "mcp",
     "strava",
-    "llm",
-    "ai"
+    "cycling",
+    "ciclismo",
+    "training",
+    "potencia",
+    "ftp",
+    "tss",
+    "vo2max"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "axios": "^1.6.0",
+    "axios": "^1.20.0",
     "dotenv": "^16.3.0",
     "open": "^10.1.0",
     "zod": "^3.25.76"

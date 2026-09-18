@@ -158,22 +158,15 @@ Dos límites más que conviene conocer:
 
 ## Instalación como servidor MCP
 
-Este fork **no está publicado en npm**: se instala desde el código fuente.
+Hay dos vías: **npx** si solo quieres usarlo, y **git clone** si vas a tocar el
+código.
 
-```bash
-git clone <url-de-tu-fork> crc-strava-mcp
-cd crc-strava-mcp
-npm install
-npm run build        # imprescindible: los clientes cargan dist/, no src/
-```
+### Opción A · npx (recomendada)
 
-> **Recompila tras cada `git pull`.** Los clientes MCP ejecutan `dist/server.js`,
-> así que un cambio en `src/` que no se compile sencillamente no existe para
-> ellos.
+No hay que clonar nada ni compilar: tu cliente MCP descarga el paquete la
+primera vez y lo mantiene actualizado.
 
-### Claude Desktop
-
-Edita el archivo de configuración:
+**Claude Desktop** — edita el archivo de configuración:
 
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
@@ -183,67 +176,100 @@ Edita el archivo de configuración:
 {
   "mcpServers": {
     "crc-strava": {
-      "command": "node",
-      "args": ["/ruta/absoluta/a/crc-strava-mcp/dist/server.js"],
-      "env": {
-        "STRAVA_CLIENT_ID": "tu_client_id",
-        "STRAVA_CLIENT_SECRET": "tu_client_secret"
-      }
+      "command": "npx",
+      "args": ["-y", "crc-strava-mcp"]
     }
   }
 }
 ```
 
-La ruta debe ser **absoluta**. En Windows, usa barras normales
-(`C:/Users/tu-usuario/...`) o escapa las invertidas.
-
-Después reinicia Claude Desktop del todo: cerrar la ventana no basta, hay que
-salir desde la bandeja del sistema o el Dock.
-
-### Codex CLI
-
-Añade el servidor a `~/.codex/config.toml`:
+**Codex CLI** — en `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.crc-strava]
-command = "node"
-args = ["/ruta/absoluta/a/crc-strava-mcp/dist/server.js"]
-
-[mcp_servers.crc-strava.env]
-STRAVA_CLIENT_ID = "tu_client_id"
-STRAVA_CLIENT_SECRET = "tu_client_secret"
+command = "npx"
+args = ["-y", "crc-strava-mcp"]
 ```
 
-### Claude Code
+**Claude Code**:
 
 ```bash
-claude mcp add crc-strava -- node /ruta/absoluta/a/crc-strava-mcp/dist/server.js
+claude mcp add crc-strava -- npx -y crc-strava-mcp
 ```
 
-### Credenciales y primera conexión
+Fíjate en que **no hay credenciales en la configuración**: se piden una sola vez
+desde el propio chat y se guardan en tu carpeta personal. Ver
+[Primera conexión](#primera-conexión).
 
-Las credenciales también pueden vivir en `~/.config/strava-mcp/config.json`, que
-es donde las deja el asistente de autenticación:
+### Opción B · git clone (desarrollo)
 
 ```bash
-npm run setup-auth
+git clone <url-de-tu-fork> crc-strava-mcp
+cd crc-strava-mcp
+npm install
+npm run build        # imprescindible: los clientes cargan dist/, no src/
 ```
 
-Con eso configurado, pide en el chat *"conecta mi cuenta de Strava"*
-(`connect-strava`) y sigue el enlace. Comprueba el estado con *"¿estoy conectado
-a Strava?"* (`check-strava-connection`).
+Y en la configuración del cliente, apuntando al compilado con **ruta absoluta**:
 
-**Una instancia = un atleta.** El servidor está pensado para tu propia cuenta: no
-hay multiusuario, y `crc-compare-activities` rechaza cualquier actividad que no
-sea tuya.
-
-### Comprobar que funciona
-
-```bash
-npm run build && npm test           # 459 tests
-node scripts/snapshot-tools.mjs     # debe listar 38 herramientas
+```json
+{
+  "mcpServers": {
+    "crc-strava": {
+      "command": "node",
+      "args": ["/ruta/absoluta/a/crc-strava-mcp/dist/server.js"]
+    }
+  }
+}
 ```
 
+> **Recompila tras cada `git pull`.** Un cambio en `src/` que no se compile
+> sencillamente no existe para el cliente.
+
+## Primera conexión
+
+Reinicia el cliente del todo (cerrar la ventana no basta: sal desde la bandeja
+del sistema o el Dock) y escribe en el chat:
+
+```
+conecta mi cuenta de Strava
+```
+
+Se abrirá una página en tu navegador que te guía en tres pasos:
+
+1. Crear una aplicación gratuita en Strava (enlace incluido).
+2. Copiar el **Authorization Callback Domain**, que la página te da con un botón
+   de copiar. Tiene que ser `localhost` a secas: ni `http://localhost`, ni
+   `localhost:8111`. Es el error más habitual y hace que Strava rechace la
+   conexión.
+3. Pegar tu **Client ID** y **Client Secret** y autorizar.
+
+Para comprobarlo después: *"¿estoy conectado a Strava?"*.
+
+### Por qué necesitas tu propia aplicación de Strava
+
+Strava exige que cada usuario acceda con sus credenciales. No las distribuimos
+en el paquete, y no es por pereza: un `client_secret` compartido sería público en
+npm, permitiría a cualquiera suplantar la aplicación, y el límite de 1000
+peticiones diarias se repartiría entre todos los que la usaran. Con tu propia
+app, ese límite es tuyo.
+
+### Dónde viven tus credenciales
+
+En `~/.config/strava-mcp/config.json`, en tu ordenador. Nunca se envían a
+ningún sitio que no sea Strava.
+
+El orden de precedencia, de mayor a menor:
+
+| # | Origen | Para qué |
+|---|---|---|
+| 1 | Variables de entorno del proceso | Lo que ponga tu cliente MCP en `env` |
+| 2 | `~/.config/strava-mcp/config.json` | **Fuente de verdad**, la escribe el alta |
+| 3 | `.env` junto al código | Solo desarrollo; con npx no existe |
+
+Es decir: el `.env` sigue funcionando si clonas el repositorio, pero cualquier
+variable de entorno lo pisa, y la configuración normal de un usuario vive en el
+punto 2. Para desconectar la cuenta: *"desconecta mi Strava"*.
 
 ## What Can You Do With This?
 

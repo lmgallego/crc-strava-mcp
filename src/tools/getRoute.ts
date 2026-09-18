@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 import { getRouteById /*, handleApiError */ } from "../stravaClient.js"; // Removed handleApiError import
 import { formatRouteSummary } from "../formatters.js"; // Import shared formatter
 
@@ -23,7 +24,7 @@ export const getRouteTool = {
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");
             return {
-                content: [{ type: "text" as const, text: "Configuration error: Missing Strava access token." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true
             };
         }

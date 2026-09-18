@@ -1,5 +1,6 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { z } from "zod";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 import { stravaId } from "../schemas/stravaId.js";
 import { starSegment as updateStarStatus } from "../stravaClient.js"; // Renamed import
 
@@ -21,7 +22,7 @@ export const starSegment = {
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");
             return {
-                content: [{ type: "text" as const, text: "❌ Configuration Error: STRAVA_ACCESS_TOKEN is missing or not set in the .env file." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true,
             };
         }

@@ -77,7 +77,8 @@ describe('getSegmentLeaderboardTool', () => {
             segmentId: 1, following: false, per_page: 10, page: 1
         });
         expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain('Missing Strava access token');
+        // El mensaje ya no describe el fallo, dice qué hacer para resolverlo.
+        expect(result.content[0].text).toContain('conecta mi cuenta de Strava');
     });
 
     it('fetches and formats leaderboard successfully', async () => {

@@ -578,3 +578,114 @@ El test recorre las 12 tools CRC en cinco escenarios adversos —actividad enter
 0 W (que produce 0/0 en el VI), actividad de 1 segundo, FC a 0, perfil vacío y
 una actividad sin más stream que el tiempo— y comprueba el texto devuelto. 62
 comprobaciones, todas en verde.
+
+## Sprint 9 — Distribución por npm (18/09/2026) · rama de pruebas
+
+**Rama de pruebas, no mergeada.** Parte de `f73ee96` (v0.1 validada, 38 tools),
+no de `main`, por lo explicado en D44.
+
+### D44. La rama parte de la v0.1, no de main
+
+Al empezar el sprint, `main` ya apuntaba al Sprint 8 (39 tools, detección de
+subidas). El reflog lo registra como `merge sprint-8/subidas: Fast-forward`, y
+ese merge no vino de ningún comando de los sprints: conviene saber cómo llegó
+ahí antes de darlo por bueno.
+
+Se decide publicar **la v0.1**, que es lo que cubre `docs/aceptacion-v0.1.md`. La
+detección de subidas es v0.2 experimental, con una escala de dificultad que es
+convención propia recién estrenada y sin validación externa: no es lo que quieres
+en el primer paquete que instale alguien.
+
+### D45. Nombre del paquete: `crc-strava-mcp`
+
+El scope `@crc` **no existe en npm** (404 en el registro), así que
+`@crc/strava-mcp-server` no era publicable sin crear antes la organización.
+Verificado que `crc-strava-mcp` está libre.
+
+Sin scope, porque el comando que teclea el usuario final es más corto:
+`npx crc-strava-mcp`. Se mantiene `strava-mcp-server` como segundo alias en
+`bin` para no romper a quien viniera del paquete original.
+
+`files` pasa a `["dist", "README.md", "LICENSE", "CHANGELOG.md"]`: antes incluía
+`scripts/`, con `setup-auth.ts` sin compilar y utilidades de desarrollo que no
+sirven de nada dentro del paquete.
+
+### D46. `npm audit`: 3 de 21 eran reales
+
+Primera revisión del audit en todo el proyecto. El desglose importa más que el
+número:
+
+| | Cuántas | Qué son |
+|---|---|---|
+| Producción (`--omit=dev`) | **3** | `form-data` (crítica), `axios` (alta), `follow-redirects` (moderada). Toda la cadena de axios. |
+| Desarrollo | 18 | `vitest`, `vite`, `rollup`, `postcss`, `esbuild`, `@typescript-eslint`. |
+
+Las 18 de desarrollo **no las instala nunca un usuario**: `npm i` de un paquete
+publicado solo resuelve `dependencies`. Son ruido para quien consume el paquete,
+aunque convenga mantenerlas al día para quien desarrolla.
+
+Las 3 de producción se arreglaron actualizando **axios 1.8.4 → 1.20.0**, que
+entra en el `^1.6.0` ya declarado: sin salto mayor y sin `--force`. Resultado:
+`npm audit --omit=dev` → **0 vulnerabilidades**, con los 459 tests intactos.
+
+No se ejecutó `npm audit fix --force`: arrastraría cambios mayores en vitest y
+en el toolchain, justo lo que sostiene el baseline.
+
+### D47. El muro del alta no estaba donde parecía
+
+El diagnóstico inicial era que el OAuth acaba en una página de localhost con
+error de conexión. Cierto, pero solo en `scripts/setup-auth.ts`, que usa
+`redirect_uri=http://localhost` **sin servidor escuchando**: el navegador falla y
+hay que copiar el código a mano de la barra de direcciones.
+
+`connect-strava` ya hacía lo correcto: servidor en `localhost:8111`, formulario
+web para las credenciales, callback real y página de éxito. El problema era que
+los dos flujos convivían.
+
+Se mejora el que funciona en lugar de inventar otro:
+
+- **Guía de tres pasos** en la propia página, con enlace a Strava.
+- **El Authorization Callback Domain, copiable con un botón**, y con un aviso de
+  que es `localhost` a secas. Es el campo donde más gente se equivoca escribiendo
+  `http://localhost` o `localhost:8111`, y el fallo se manifiesta después, al
+  autorizar, donde ya no es evidente de dónde viene.
+- La página dice dónde se guardan las credenciales y que no salen del equipo.
+
+Descartado: una app de Strava compartida. Exigiría distribuir el `client_secret`
+en un paquete público, permitiría suplantar la aplicación y repartiría el límite
+de 1000 peticiones/día entre todos los usuarios. Contradice además la decisión
+del estudio de que cada usuario use su propia app.
+
+### D48. Los errores dicen qué hacer, no qué ha fallado
+
+`src/authMessages.ts` centraliza los mensajes de autenticación. Antes cada
+herramienta repetía su propio literal, con dos redacciones distintas y ambas
+inútiles para el usuario: *"Configuration Error: STRAVA_ACCESS_TOKEN is missing
+or not set in the .env file"* le habla de una variable de entorno y de un fichero
+que, instalando por npx, no existe.
+
+Ahora: *"Todavía no hay ninguna cuenta de Strava conectada. Qué hacer: escribe
+«conecta mi cuenta de Strava»…"*. Están en un único módulo para que el día que
+cambie el procedimiento haya un solo sitio que tocar.
+
+Efecto lateral asumido: dos tests originales comprobaban el texto literal. Se
+actualizaron para verificar lo que de verdad importa —que hay error y que el
+mensaje orienta—, no la redacción exacta.
+
+### D49. Precedencia de credenciales, declarada
+
+1. Variables de entorno del proceso.
+2. `~/.config/strava-mcp/config.json` ← fuente de verdad.
+3. `.env` junto al paquete ← solo desarrollo.
+
+Ya funcionaba así en `config.ts`, pero no estaba escrito en ninguna parte. El
+`.env` se carga primero en el arranque porque dotenv nunca pisa una variable ya
+definida, de modo que el orden efectivo es el de arriba. Con npx no hay ningún
+`.env` y eso es lo normal.
+
+### D50. Verificado instalando el tarball, no solo empaquetando
+
+`npm pack` genera el .tgz, pero no prueba que el paquete funcione. Se instaló en
+un directorio limpio fuera del repositorio y se arrancó con un cliente MCP real
+contra `node_modules/crc-strava-mcp/dist/server.js`: **38 tools, 12 de ellas
+CRC**. Es la única forma de comprobar que `files`, `bin` y el shebang están bien.

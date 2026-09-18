@@ -17,7 +17,8 @@ describe("get-athlete-shoes tool", () => {
         const result = await getAthleteShoesTool.execute();
 
         expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain("STRAVA_ACCESS_TOKEN");
+        // El mensaje ya no nombra la variable de entorno: orienta al usuario.
+        expect(result.content[0].text).toContain("conecta mi cuenta de Strava");
     });
 
     it("returns shoes list when athlete has shoes", async () => {

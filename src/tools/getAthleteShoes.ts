@@ -1,4 +1,5 @@
 import { getAuthenticatedAthlete } from "../stravaClient.js";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 
 export const getAthleteShoesTool = {
     name: "get-athlete-shoes",
@@ -10,7 +11,7 @@ export const getAthleteShoesTool = {
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");
             return {
-                content: [{ type: "text" as const, text: "❌ Configuration Error: STRAVA_ACCESS_TOKEN is missing or not set in the .env file." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true,
             };
         }

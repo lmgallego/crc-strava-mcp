@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 import { getActivityLaps as getActivityLapsClient } from "../stravaClient.js";
 import { formatDuration } from "../server.js"; // Import helper
 
@@ -50,7 +51,7 @@ export const getActivityLapsTool = {
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");
             return {
-                content: [{ type: "text" as const, text: "Configuration error: Missing Strava access token." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true
             };
         }

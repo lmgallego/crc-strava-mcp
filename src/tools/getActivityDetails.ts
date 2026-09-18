@@ -1,5 +1,6 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { z } from "zod";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 import { stravaId } from "../schemas/stravaId.js";
 import { formatLocalDateTime } from "../formatters.js";
 import {
@@ -97,7 +98,7 @@ export const getActivityDetailsTool = {
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");
             return {
-                content: [{ type: "text" as const, text: "Configuration error: Missing Strava access token." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true
             };
         }

@@ -41,13 +41,19 @@ import { registerCrcTools } from './crc/registerCrcTools.js';
 //     getActivityLaps as getActivityLapsClient
 // } from './stravaClient.js';
 
-// Load .env file explicitly from project root
+// --- Credenciales: orden de precedencia (declarado y documentado) ---------
+//   1. Variables de entorno del proceso (las que pone el cliente MCP).
+//   2. ~/.config/strava-mcp/config.json  <- fuente de verdad, la escribe el alta.
+//   3. .env junto al paquete             <- solo desarrollo.
+//
+// El .env se carga el PRIMERO porque dotenv nunca pisa una variable ya
+// definida: así el entorno real mantiene la prioridad. Instalado con npx no
+// existe ningún .env, y eso es lo normal: la configuración vive en ~/.config.
+// El merge con el fichero de config lo hace loadConfig() al arrancar.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const envPath = path.join(projectRoot, '.env');
-// REMOVE THIS DEBUG LOG - Interferes with MCP Stdio transport
-// console.log(`[DEBUG] Attempting to load .env file from: ${envPath}`);
 dotenv.config({ path: envPath });
 
 const { version: serverVersion } = getServerInfo();

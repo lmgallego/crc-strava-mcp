@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NO_STRAVA_CONNECTION } from "../authMessages.js";
 import { getAthleteZones as fetchAthleteZones, StravaAthleteZones } from "../stravaClient.js";
 import { formatDuration } from "../server.js"; // Shared helper
 
@@ -66,7 +67,7 @@ export const getAthleteZonesTool = {
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");
             return {
-                content: [{ type: "text" as const, text: "Configuration error: Missing Strava access token." }],
+                content: [{ type: "text" as const, text: NO_STRAVA_CONNECTION }],
                 isError: true
             };
         }
