@@ -587,9 +587,11 @@ no de `main`, por lo explicado en D44.
 ### D44. La rama parte de la v0.1, no de main
 
 Al empezar el sprint, `main` ya apuntaba al Sprint 8 (39 tools, detección de
-subidas). El reflog lo registra como `merge sprint-8/subidas: Fast-forward`, y
-ese merge no vino de ningún comando de los sprints: conviene saber cómo llegó
-ahí antes de darlo por bueno.
+subidas). El reflog lo registra como `merge sprint-8/subidas: Fast-forward`.
+
+**Aclarado:** ese fast-forward fue deliberado, pedido para probar la detección de
+subidas en Claude Desktop. No hay nada que investigar y `main` se queda como
+está: la 0.2.0 saldrá de ahí cuando las subidas se validen con datos reales.
 
 Se decide publicar **la v0.1**, que es lo que cubre `docs/aceptacion-v0.1.md`. La
 detección de subidas es v0.2 experimental, con una escala de dificultad que es
@@ -689,3 +691,34 @@ definida, de modo que el orden efectivo es el de arriba. Con npx no hay ningún
 un directorio limpio fuera del repositorio y se arrancó con un cliente MCP real
 contra `node_modules/crc-strava-mcp/dist/server.js`: **38 tools, 12 de ellas
 CRC**. Es la única forma de comprobar que `files`, `bin` y el shebang están bien.
+
+
+### D51. La página de alta está en español, a propósito
+
+El resto de la interfaz heredada del proyecto original está en inglés, pero la
+página de conexión (`src/auth/pages.ts`, `setupPage`) se escribe en español.
+
+Es una elección deliberada, no un descuido: el fork va dirigido a cicloturistas
+hispanohablantes y esa página es **la primera pantalla que ve un usuario nuevo**,
+justo en el paso donde más gente abandona. Un muro de onboarding en otro idioma
+es un muro más alto.
+
+Coherente con el resto de la documentación del fork (README, `decisiones.md`,
+`aceptacion-v0.1.md`, CHANGELOG), toda en español. Si alguna vez se publica el
+fork para público internacional, esta es la pieza a traducir primero, junto con
+los mensajes de `src/authMessages.ts`.
+
+### D52. Numeración: 0.1.0 limpia, no prerelease
+
+La versión pasa de `0.1.0-crc.0` a **`0.1.0`**. Un prerelease no se instala con
+`npm install crc-strava-mcp` ni con `npx crc-strava-mcp` salvo que se pida por
+nombre exacto, que es justo lo contrario de lo que busca este sprint.
+
+La numeración arranca en 0.1.0 y no continúa la 1.2.1 del proyecto original
+porque el alcance y el contrato son distintos: son 38 herramientas frente a 26,
+con una capa de cálculo propia.
+
+Metadatos actualizados al fork, que apuntaban todos al repositorio original:
+`repository.url`, `homepage`, `bugs`, `author` y `mcpName` en `package.json`, y
+`name`, `repository`, `description` e `identifier` del paquete npm en
+`server.json` (este último aún declaraba `@r-huijts/strava-mcp-server`).

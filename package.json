@@ -1,11 +1,11 @@
 {
   "name": "crc-strava-mcp",
-  "version": "0.1.0-crc.0",
+  "version": "0.1.0",
   "description": "Servidor MCP para Strava con capa analitica determinista (CRC): NP, IF, TSS, curvas de potencia, desacople, zonas y VO2max estimado.",
-  "mcpName": "io.github.r-huijts/strava-mcp",
+  "mcpName": "io.github.lmgallego/crc-strava-mcp",
   "repository": {
     "type": "git",
-    "url": "https://github.com/r-huijts/strava-mcp"
+    "url": "git+https://github.com/lmgallego/crc-strava-mcp.git"
   },
   "main": "dist/server.js",
   "bin": {
@@ -43,7 +43,7 @@
     "tss",
     "vo2max"
   ],
-  "author": "",
+  "author": "lmgallego",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -61,5 +61,9 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^2.1.8"
+  },
+  "homepage": "https://github.com/lmgallego/crc-strava-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/lmgallego/crc-strava-mcp/issues"
   }
 }

@@ -27,3 +27,6 @@ yarn-error.log*
 cursor_rules.json 
 .mcpregistry_registry_token
 .mcpregistry_github_token
+
+# Tarballs de npm pack
+*.tgz
