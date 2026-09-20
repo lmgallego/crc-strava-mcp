@@ -8,20 +8,35 @@ import { z } from "zod";
 
 import {
     detectClimbs,
+    linearTrend,
+    MIN_CLIMBS_FOR_TREND,
     DEFAULT_MAX_FLAT_RUN_M,
     DEFAULT_MIN_AVG_GRADE_PCT,
     DEFAULT_MIN_ELEVATION_GAIN_M,
     DEFAULT_MIN_LENGTH_M,
+    type Climb,
 } from "../analytics/climbDetection.js";
+import { bestEffortsInPeriod } from "../analytics/bestEffort.js";
+import { summariseSignal } from "../analytics/streamSummary.js";
+import { sliceAlignedStreams } from "../streams/alignedStreams.js";
 import { resolveMetric } from "../profile/profileResolver.js";
 import { loadProfile } from "../profile/profileStore.js";
 import { describeProvenance } from "../profile/provenance.js";
-import { fetchActivityStreams } from "../sources/strava.js";
+import { fetchActivityStreams, stravaBestEffortProviders } from "../sources/strava.js";
 import { CrcErrorCode, crcToolResponse, crcUnavailable } from "../schemas/crcToolResponse.js";
 import { stravaId } from "../schemas/mcpSchemas.js";
 import { computeStreamQuality } from "../streams/streamQuality.js";
 
 export const CRC_VERSION = "0.1.0";
+
+/**
+ * Ventana por defecto para comparar con el mejor histórico.
+ *
+ * 42 días son seis semanas: suficiente para que haya esfuerzos comparables y
+ * corto para que sigan reflejando la forma actual.
+ */
+export const DEFAULT_MMP_WINDOW_DAYS = 42;
+export const DEFAULT_MMP_MAX_ACTIVITIES = 30;
 
 export const detectClimbsTool = {
     name: "crc-detect-climbs",
@@ -61,6 +76,25 @@ export const detectClimbsTool = {
             .describe("Ventana de suavizado de la altitud, en segundos. Por defecto 15."),
         ftp_w: z.number().positive().optional().describe("FTP en W. Por defecto, del perfil CRC."),
         weight_kg: z.number().positive().optional().describe("Peso en kg. Por defecto, del perfil."),
+        compare_to_best: z
+            .boolean()
+            .optional()
+            .describe(
+                "Compara la potencia de cada subida con el mejor esfuerzo histórico de esa " +
+                    "misma duración. Requiere potencia medida y cuesta llamadas a la API.",
+            ),
+        mmp_window_days: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(`Ventana del histórico. Por defecto ${DEFAULT_MMP_WINDOW_DAYS} días.`),
+        mmp_max_activities: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(`Tope de actividades del barrido. Por defecto ${DEFAULT_MMP_MAX_ACTIVITIES}.`),
     }),
     execute: async (args: {
         activityId: string;
@@ -71,6 +105,9 @@ export const detectClimbsTool = {
         smoothing_window_s?: number;
         ftp_w?: number;
         weight_kg?: number;
+        compare_to_best?: boolean;
+        mmp_window_days?: number;
+        mmp_max_activities?: number;
     }) => {
         try {
             const activity = await fetchActivityStreams(args.activityId);
@@ -118,6 +155,7 @@ export const detectClimbsTool = {
                 smoothingWindowS: args.smoothing_window_s,
                 ftpW: ftp,
                 weightKg: weight,
+                powerIsMeasured: quality.power_source === "measured",
             });
 
             if (!c.available) {
@@ -135,6 +173,78 @@ export const detectClimbsTool = {
                 );
             }
 
+            // --- FC media por subida, para la tendencia ----------------------
+            const climbs: Climb[] = c.climbs;
+            const hrPorSubida: (number | null)[] = climbs.map((climb) => {
+                if (!activity.aligned.heartrate) return null;
+                const from = climb.start_time_s - activity.aligned.meta.start_offset_s;
+                const to = climb.end_time_s - activity.aligned.meta.start_offset_s;
+                const s = summariseSignal(sliceAlignedStreams(activity.aligned, from, to), "heartrate");
+                return s.available ? s.mean : null;
+            });
+
+            // --- Comparación con el mejor histórico --------------------------
+            let mmpInfo: Record<string, unknown> | null = null;
+            if (args.compare_to_best) {
+                if (quality.power_source !== "measured") {
+                    warnings.push(
+                        `No se compara con el histórico: la potencia es ${quality.power_source} ` +
+                            "y solo tiene sentido comparar potencia medida.",
+                    );
+                } else if (climbs.length === 0) {
+                    warnings.push("No se compara con el histórico: no se detectó ninguna subida.");
+                } else {
+                    const ventana = args.mmp_window_days ?? DEFAULT_MMP_WINDOW_DAYS;
+                    // Una sola pasada para todas las duraciones: una llamada por
+                    // subida repetiría el barrido entero.
+                    const duraciones = [...new Set(climbs.map((x) => x.duration_s))].filter(
+                        (d) => d > 0,
+                    );
+                    const mejores = await bestEffortsInPeriod(duraciones, ventana, {
+                        // La propia actividad NO cuenta: si contara, una subida
+                        // récord daría 100 % en vez de superarlo.
+                        excludeActivityIds: [activity.activity_id],
+                        maxActivities: args.mmp_max_activities ?? DEFAULT_MMP_MAX_ACTIVITIES,
+                        providers: stravaBestEffortProviders(),
+                    });
+
+                    for (const climb of climbs) {
+                        const r = mejores[climb.duration_s];
+                        if (!r?.available || !r.best || climb.average_power_w === null) continue;
+                        climb.mmp_comparison = {
+                            percent_of_best:
+                                Math.round((climb.average_power_w / r.best.power_w) * 1000) / 10,
+                            duration_s: climb.duration_s,
+                            best_power_w: r.best.power_w,
+                            best_activity_id: r.best.activity_id,
+                            best_activity_date: r.best.activity_date,
+                            window_days: ventana,
+                        };
+                    }
+
+                    const cualquiera = mejores[duraciones[0]!];
+                    mmpInfo = {
+                        window_days: ventana,
+                        excluded_activity_id: activity.activity_id,
+                        durations_compared: duraciones,
+                        analysed_activities: cualquiera?.analysed_activities ?? 0,
+                        listed_activities: cualquiera?.listed_activities ?? 0,
+                        compared: climbs.filter((x) => x.mmp_comparison !== null).length,
+                    };
+                    warnings.push(...(cualquiera?.warnings ?? []));
+                }
+            }
+
+            // --- Tendencia entre subidas -------------------------------------
+            // Coeficientes en crudo: la lectura la hace quien los reciba.
+            const tendencia = {
+                average_power_w: linearTrend(climbs.map((x) => x.average_power_w)),
+                heartrate_bpm: linearTrend(hrPorSubida),
+                min_climbs_required: MIN_CLIMBS_FOR_TREND,
+                climbs_available: climbs.length,
+                x_axis: "índice de subida dentro de la actividad (0, 1, 2…)",
+            };
+
             return json(
                 crcToolResponse({
                     tool: "crc-detect-climbs",
@@ -148,11 +258,23 @@ export const detectClimbsTool = {
                         parameter_sources: sources,
                         thresholds: c.thresholds,
                     },
-                    method: c.method,
+                    method: {
+                        ...c.method,
+                        trends:
+                            "Regresión lineal de la potencia media y de la FC media sobre el " +
+                            `índice de subida. Mínimo ${MIN_CLIMBS_FOR_TREND} subidas. Se devuelven ` +
+                            "los coeficientes en crudo, sin interpretarlos.",
+                        mmp:
+                            "Potencia media de la subida frente al mejor esfuerzo del atleta en " +
+                            "esa misma duración, excluyendo la actividad analizada.",
+                    },
                     metrics: {
                         climb_count: c.climb_count,
                         total_elevation_gain_m: c.total_elevation_gain_m,
-                        climbs: c.climbs,
+                        climbs,
+                        mean_heartrate_by_climb: hrPorSubida,
+                        trends: tendencia,
+                        mmp: mmpInfo,
                     },
                     quality: {
                         ...quality,

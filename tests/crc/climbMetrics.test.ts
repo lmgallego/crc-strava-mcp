@@ -139,6 +139,10 @@ describe("18-metricas-subidas · golden", () => {
         expect(t.slope).toBeLessThan(0);
     });
 
+    it("mmp_comparison llega a null: lo rellena la herramienta, no el módulo puro", () => {
+        for (const c of r.climbs) expect(c.mmp_comparison).toBeNull();
+    });
+
     it("la salida no interpreta nada", () => {
         const texto = JSON.stringify(r.climbs).toLowerCase();
         for (const palabra of ["fatiga", "deriva", "recomend", "deberías", "empeora"]) {

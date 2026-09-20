@@ -739,17 +739,6 @@ defecto sigue en `false` para que ningún valor se quede fuera por olvido.
 `classified_seconds`, no `valid_seconds`. La fixture `16-zonas-sobre-maxima`
 comprueba justo ese caso.
 
-### D62. Un bug de prioridad de errores que el sprint destapó
-
-Al anclar las zonas de FC al umbral, una actividad **sin pulsómetro** empezó a
-devolver `MISSING_HR_THRESHOLD`: el perfil se resolvía antes de mirar si había
-señal. El usuario habría configurado su umbral para descubrir que seguía sin
-funcionar.
-
-Corregido: si no hay stream de FC no se resuelve el umbral, y el error vuelve a
-ser `MISSING_HR`. La regla general que deja el caso: **cuando faltan un dato de
-la actividad y uno del perfil, se reporta primero el de la actividad**, porque
-es el que el usuario no puede arreglar configurando nada.
 ### D60. `bestEffortInPeriod` admite la señal de FC
 
 En vez de escribir un segundo barrido, se añadió el parámetro `signal`
@@ -777,11 +766,22 @@ Redactados como alcance del método, no como error de cálculo. Hay un test que
 falla si el texto empieza a hablar de "error" o "fallo".
 
 
-## Sprint 11 — Métricas de subidas (20/09/2026) · v0.2
-
 Métricas que venían de un script de análisis de puertos ya en uso. Adaptadas a
 las reglas del proyecto, no copiadas: funciones puras en `analytics/`, sin
 interpretación en la salida y consumiendo `powerMetrics` para el NP.
+
+### D62. Un bug de prioridad de errores que el sprint destapó
+
+Al anclar las zonas de FC al umbral, una actividad **sin pulsómetro** empezó a
+devolver `MISSING_HR_THRESHOLD`: el perfil se resolvía antes de mirar si había
+señal. El usuario habría configurado su umbral para descubrir que seguía sin
+funcionar.
+
+Corregido: si no hay stream de FC no se resuelve el umbral, y el error vuelve a
+ser `MISSING_HR`. La regla general que deja el caso: **cuando faltan un dato de
+la actividad y uno del perfil, se reporta primero el de la actividad**, porque
+es el que el usuario no puede arreglar configurando nada.
+## Sprint 11 — Métricas de subidas (20/09/2026) · v0.2
 
 ### D63. El índice de dificultad pasa a ser cuadrático en la pendiente
 
@@ -830,6 +830,29 @@ ciclista entre sí, no para comparar ciclistas**. Depende de la posición sobre 
 bici, del material, del viento y de la propia pendiente, así que dos personas
 con el mismo EI no rinden igual. Es la clase de número que invita al ranking
 justo cuando peor lo soporta.
+
+### D65. La comparación con el histórico excluye la actividad analizada
+
+`%MMP` compara la potencia media de cada subida con el mejor esfuerzo del atleta
+en **esa misma duración**, en una ventana de 42 días por defecto (seis semanas:
+bastante para tener con qué comparar, poco para que siga reflejando la forma
+actual).
+
+**La actividad analizada se excluye del histórico.** Si contara, una subida que
+bate el récord se compararía consigo misma y daría exactamente 100 % en vez de
+superarlo, que es justo el caso que interesa detectar. Para eso se añadió
+`excludeActivityIds` a `bestEffortInPeriod`.
+
+**Un solo barrido para todas las subidas.** Cada subida necesita su propia
+duración, y llamar una vez por subida repetiría el recorrido entero del
+historial. Se añadió `bestEffortsInPeriod` (plural), que recorre las actividades
+UNA vez y saca todas las duraciones de cada una, que es lo que `computePowerCurve`
+ya hacía en una pasada. `bestEffortInPeriod` queda como envoltorio de un solo
+elemento, así que nada de lo que la usaba cambia.
+
+Requiere potencia medida y está detrás de `compare_to_best`, apagado por
+defecto: cuesta llamadas a la API y no todo el mundo la necesita en cada
+análisis.
 
 ### D66. Las tendencias se devuelven como coeficientes, sin etiqueta
 

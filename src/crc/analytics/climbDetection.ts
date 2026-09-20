@@ -78,6 +78,24 @@ export interface Climb {
     average_wkg: number | null;
     /** VAM / (W/kg). Solo con potencia medida y peso vigente. */
     efficiency_index: number | null;
+    /**
+     * Comparación con el mejor histórico del atleta en esta misma duración.
+     * La rellena la herramienta, que es quien puede consultar el historial:
+     * este módulo es puro y no hace IO.
+     */
+    mmp_comparison: MmpComparison | null;
+}
+
+/** Comparación de una subida con el mejor esfuerzo histórico de igual duración. */
+export interface MmpComparison {
+    /** % de la potencia media de la subida sobre el mejor histórico. */
+    percent_of_best: number;
+    /** Duración con la que se comparó, en segundos. */
+    duration_s: number;
+    best_power_w: number;
+    best_activity_id: string;
+    best_activity_date: string;
+    window_days: number;
 }
 
 export interface ClimbDetectionResult {
@@ -344,6 +362,7 @@ export function detectClimbs(
                 options.powerIsMeasured === true && wkg !== null
                     ? roundOrNull(efficiencyIndex(vam, wkg), 2)
                     : null,
+            mmp_comparison: null,
         });
     }
 

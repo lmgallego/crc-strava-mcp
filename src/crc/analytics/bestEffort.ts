@@ -55,6 +55,14 @@ export interface BestEffortOptions {
     signal?: EffortSignal;
     /** Ventana hacia atrás, en días. Por defecto 90. */
     days?: number;
+    /**
+     * Actividades que NO entran en la comparación.
+     *
+     * Necesario para comparar una actividad contra su histórico: si la propia
+     * actividad cuenta, una subida que bate el récord da 100 % en vez de
+     * superarlo, y el dato deja de significar nada.
+     */
+    excludeActivityIds?: readonly string[];
     /** Tope de actividades a descargar. Por defecto 30. */
     maxActivities?: number;
     /** Momento de referencia. Inyectable para que los tests sean deterministas. */
@@ -110,8 +118,31 @@ export async function bestEffortInPeriod(
     days: number = DEFAULT_WINDOW_DAYS,
     options: BestEffortOptions,
 ): Promise<BestEffortResult> {
-    if (!Number.isFinite(durationS) || durationS <= 0) {
-        throw new Error(`duration_s debe ser > 0 (recibido: ${durationS}).`);
+    const multi = await bestEffortsInPeriod([durationS], days, options);
+    return multi[durationS]!;
+}
+
+/**
+ * Igual que `bestEffortInPeriod`, pero para VARIAS duraciones a la vez.
+ *
+ * Comparar cada subida de una actividad con su mejor histórico necesita una
+ * duración distinta por subida. Llamar una vez por subida repetiría el barrido
+ * entero; aquí las actividades se recorren UNA vez y de cada una se sacan todas
+ * las duraciones pedidas, que es lo que `computePowerCurve` ya hace en una
+ * pasada.
+ */
+export async function bestEffortsInPeriod(
+    durations: readonly number[],
+    days: number = DEFAULT_WINDOW_DAYS,
+    options: BestEffortOptions,
+): Promise<Record<number, BestEffortResult>> {
+    if (durations.length === 0) {
+        throw new Error("Hay que pedir al menos una duración.");
+    }
+    for (const d of durations) {
+        if (!Number.isFinite(d) || d <= 0) {
+            throw new Error(`duration_s debe ser > 0 (recibido: ${d}).`);
+        }
     }
     if (!Number.isFinite(days) || days <= 0) {
         throw new Error(`days debe ser > 0 (recibido: ${days}).`);
@@ -127,8 +158,8 @@ export async function bestEffortInPeriod(
 
     const method: Record<string, string> = {
         search:
-            `Mejor media sostenida de ${durationS} s entre las actividades de los últimos ` +
-            `${days} días, con un tope de ${maxActivities} actividades.`,
+            `Mejor media sostenida de ${durations.join(", ")} s entre las actividades de los ` +
+            `últimos ${days} días, con un tope de ${maxActivities} actividades.`,
         windows:
             "Las ventanas móviles no cruzan tramos no válidos (misma regla que la power curve).",
         signal: `Mejor media sostenida de la señal ${signal}.`,
@@ -141,14 +172,24 @@ export async function bestEffortInPeriod(
     const warnings: string[] = [];
     const skipped: SkippedActivity[] = [];
 
-    const listed = await options.providers.listActivities(window.from, window.to, maxActivities);
+    const excluded = new Set(options.excludeActivityIds ?? []);
+    const listedRaw = await options.providers.listActivities(
+        window.from,
+        window.to,
+        maxActivities,
+    );
+    const listed = listedRaw.filter((a) => !excluded.has(a.activity_id));
+    if (excluded.size > 0) {
+        method["exclusions"] = `Excluidas de la comparación: ${[...excluded].join(", ")}.`;
+    }
     if (listed.length >= maxActivities) {
         warnings.push(
             `Se alcanzó el tope de ${maxActivities} actividades: puede haber esfuerzos mejores sin analizar.`,
         );
     }
 
-    let best: BestEffort | null = null;
+    const best: Record<number, BestEffort | null> = {};
+    for (const d of durations) best[d] = null;
     let analysed = 0;
 
     for (const ref of listed) {
@@ -201,32 +242,42 @@ export async function bestEffortInPeriod(
             signal === "watts"
                 ? streams.aligned
                 : { ...streams.aligned, watts: streams.aligned[signal] };
-        const curve = computePowerCurve(source, { durations: [durationS] });
-        const entry = curve.entries[durationS];
-        if (!entry || !entry.available || entry.best_power_w === null) {
-            skipped.push({
-                activity_id: ref.activity_id,
-                reason: `Sin ninguna ventana válida de ${durationS} s.`,
-            });
-            continue;
+        // Todas las duraciones salen de la MISMA pasada por la actividad.
+        const curve = computePowerCurve(source, { durations: [...durations] });
+        let algunaValida = false;
+
+        for (const d of durations) {
+            const entry = curve.entries[d];
+            if (!entry || !entry.available || entry.best_power_w === null) continue;
+            algunaValida = true;
+
+            const actual = best[d] ?? null;
+            if (actual === null || entry.best_power_w > actual.power_w) {
+                best[d] = {
+                    power_w: entry.best_power_w,
+                    activity_id: ref.activity_id,
+                    activity_date: streams.start_date ?? ref.start_date,
+                    start_time_s: entry.start_time_s ?? 0,
+                    end_time_s: entry.end_time_s ?? 0,
+                };
+            }
         }
 
-        if (best === null || entry.best_power_w > best.power_w) {
-            best = {
-                power_w: entry.best_power_w,
+        if (!algunaValida) {
+            skipped.push({
                 activity_id: ref.activity_id,
-                activity_date: streams.start_date ?? ref.start_date,
-                start_time_s: entry.start_time_s ?? 0,
-                end_time_s: entry.end_time_s ?? 0,
-            };
+                reason: `Sin ninguna ventana válida de ${durations.join(" ni ")} s.`,
+            });
         }
     }
 
-    if (best === null) {
-        return {
-            available: false,
-            duration_s: durationS,
-            best: null,
+    const out: Record<number, BestEffortResult> = {};
+    for (const d of durations) {
+        const b = best[d] ?? null;
+        out[d] = {
+            available: b !== null,
+            duration_s: d,
+            best: b,
             window,
             analysed_activities: analysed,
             listed_activities: listed.length,
@@ -234,23 +285,13 @@ export async function bestEffortInPeriod(
             method,
             warnings,
             reason:
-                listed.length === 0
-                    ? `No hay actividades en los últimos ${days} días.`
-                    : `Ninguna actividad del periodo tiene un esfuerzo válido de ${durationS} s ` +
-                      `en la señal ${signal}.`,
+                b !== null
+                    ? null
+                    : listed.length === 0
+                      ? `No hay actividades en los últimos ${days} días.`
+                      : `Ninguna actividad del periodo tiene un esfuerzo válido de ${d} s ` +
+                        `en la señal ${signal}.`,
         };
     }
-
-    return {
-        available: true,
-        duration_s: durationS,
-        best,
-        window,
-        analysed_activities: analysed,
-        listed_activities: listed.length,
-        skipped,
-        method,
-        warnings,
-        reason: null,
-    };
+    return out;
 }
