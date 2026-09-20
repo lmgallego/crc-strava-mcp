@@ -43,11 +43,32 @@ export const stravaId = z
 export type StravaId = z.infer<typeof stravaId>;
 
 /**
- * Booleano tolerante: algunos clientes MCP envían los booleanos como texto.
- * Acepta `true`, `false`, `"true"` y `"false"`; devuelve siempre `boolean`.
+ * Booleano tolerante: no todos los clientes MCP serializan igual un booleano.
+ *
+ * Acepta, además del `boolean` nativo:
+ * - `"true"` / `"false"` en minúscula, que es lo que envía JSON.
+ * - `"True"` / `"TRUE"` y sus negativos, que es la forma natural de un cliente
+ *   entrenado sobre Python, donde el literal se escribe capitalizado.
+ * - `1` y `0`, la convención de C y de buena parte de las APIs.
+ *
+ * Devuelve siempre `boolean`. Deliberadamente NO acepta `"1"`, `"0"`, `"yes"`,
+ * `"si"` ni cadena vacía: ahí ya no se está normalizando una serialización,
+ * se está adivinando la intención.
  */
+const TRUE_STRINGS = ["true", "True", "TRUE"] as const;
+const FALSE_STRINGS = ["false", "False", "FALSE"] as const;
+
 export const flexibleBoolean = z
-    .union([z.boolean(), z.enum(["true", "false"])])
-    .transform((value) => (typeof value === "boolean" ? value : value === "true"));
+    .union([
+        z.boolean(),
+        z.enum([...TRUE_STRINGS, ...FALSE_STRINGS]),
+        z.literal(0),
+        z.literal(1),
+    ])
+    .transform((value) => {
+        if (typeof value === "boolean") return value;
+        if (typeof value === "number") return value === 1;
+        return value.toLowerCase() === "true";
+    });
 
 export type FlexibleBoolean = z.infer<typeof flexibleBoolean>;

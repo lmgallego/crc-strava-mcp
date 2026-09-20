@@ -54,11 +54,40 @@ describe("flexibleBoolean", () => {
         expect(flexibleBoolean.parse("false")).toBe(false);
     });
 
-    it("rechaza otros valores", () => {
-        for (const bad of ["yes", "1", 1, 0, "True", null, undefined]) {
-            expect(flexibleBoolean.safeParse(bad).success, `debería rechazar ${String(bad)}`).toBe(
-                false,
-            );
+    it("acepta la forma capitalizada de Python", () => {
+        // Un cliente entrenado sobre Python escribe True/False, no true/false.
+        expect(flexibleBoolean.parse("True")).toBe(true);
+        expect(flexibleBoolean.parse("False")).toBe(false);
+    });
+
+    it("acepta la forma en mayúsculas", () => {
+        expect(flexibleBoolean.parse("TRUE")).toBe(true);
+        expect(flexibleBoolean.parse("FALSE")).toBe(false);
+    });
+
+    it("acepta 1 y 0", () => {
+        expect(flexibleBoolean.parse(1)).toBe(true);
+        expect(flexibleBoolean.parse(0)).toBe(false);
+    });
+
+    it("rechaza lo que ya sería adivinar la intención", () => {
+        // El límite: normalizar una serialización, sí; interpretar, no.
+        for (const bad of ["yes", "no", "si", "1", "0", 2, -1, "", " true ", null, undefined, {}]) {
+            expect(
+                flexibleBoolean.safeParse(bad).success,
+                `debería rechazar ${JSON.stringify(bad)}`,
+            ).toBe(false);
+        }
+    });
+
+    it("todas las formas aceptadas dan un boolean nativo", () => {
+        for (const v of [true, "true", "True", "TRUE", 1] as unknown[]) {
+            const r = flexibleBoolean.parse(v);
+            expect(typeof r, `${JSON.stringify(v)} debería dar boolean`).toBe("boolean");
+            expect(r).toBe(true);
+        }
+        for (const v of [false, "false", "False", "FALSE", 0] as unknown[]) {
+            expect(flexibleBoolean.parse(v)).toBe(false);
         }
     });
 });
