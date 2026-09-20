@@ -1,0 +1,49 @@
+{
+  "fixture": "16-zonas-sobre-maxima",
+  "description": "Dos minutos por encima de la FC maxima registrada (artefacto o maxima desactualizada).",
+  "inputs": {
+    "hr_threshold_bpm": 165,
+    "hr_max_bpm": 190
+  },
+  "zone_bounds": {
+    "Z1": [
+      0,
+      114
+    ],
+    "Z2": [
+      114,
+      139
+    ],
+    "Z3": [
+      139,
+      157
+    ],
+    "Z4": [
+      157,
+      174
+    ],
+    "Z5": [
+      174,
+      191
+    ]
+  },
+  "expected": {
+    "valid_seconds": 720,
+    "seconds_by_zone": {
+      "Z1": 0,
+      "Z2": 0,
+      "Z3": 600,
+      "Z4": 0,
+      "Z5": 0
+    },
+    "classified_seconds": 600,
+    "unclassified_seconds": 120
+  },
+  "method": {
+    "cuts": "round(pct * LTHR) a latidos enteros; cada corte es tope de una zona y suelo de la siguiente",
+    "z4_top": "Z4 incluye su tope (1.05 * LTHR); Z5 empieza un latido mas arriba",
+    "z5_top": "Z5 cerrada en hr_max_bpm + 1; por encima queda sin clasificar",
+    "derivation": "segundos por zona fijados por construccion de los bloques"
+  },
+  "notes": "Los 120 s por encima de la maxima NO se suman a Z5: quedan sin clasificar. Aqui la suma por zona iguala classified_seconds, no valid_seconds."
+}

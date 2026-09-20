@@ -130,7 +130,7 @@ describe("crcUnavailable", () => {
         const ampliaciones = Object.keys(CrcErrorCode).filter(
             (c) => !SPEC_V01_ERROR_CODES.includes(c as (typeof SPEC_V01_ERROR_CODES)[number]),
         );
-        // v0.2: MISSING_ELEVATION para la detección de subidas.
-        expect(ampliaciones).toEqual(["MISSING_ELEVATION"]);
+        // v0.2: subidas (Sprint 8) y umbral de FC (Sprint 10).
+        expect(ampliaciones).toEqual(["MISSING_ELEVATION", "MISSING_HR_THRESHOLD"]);
     });
 });

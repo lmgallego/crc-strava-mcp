@@ -705,3 +705,48 @@ los dos valores se guarde primero.
 Las ventanas que no se solapan no se comparan: un umbral alto en 2025 y una FC
 máxima más baja medida en 2026 son perfectamente compatibles.
 
+### D58. Cortes enteros, no porcentajes
+
+Las zonas de Coggan se definen en porcentajes (69 %, 84 %, 95 %, 105 %), pero se
+guardan como **cortes en bpm enteros**. Dos motivos:
+
+- Un pulsómetro no da decimales. "Zona 4 a partir de 156,75 ppm" no significa
+  nada sobre el terreno.
+- Tomados literalmente, los porcentajes dejan huecos: entre "Z1 hasta 68 %" y
+  "Z2 desde 69 %" falta el 68,5 %. Guardando **un único corte** que es a la vez
+  tope de una zona y suelo de la siguiente, el hueco no puede existir por
+  construcción.
+
+Con LTHR 165: Z1 `[0,114)`, Z2 `[114,139)`, Z3 `[139,157)`, Z4 `[157,174)`,
+Z5 `[174,191)`. El latido del corte pertenece siempre a la zona superior, igual
+que en las zonas de potencia ([D21](#d21-fronteras-semiabiertas-en-zonas-y-rangos)).
+
+### D59. La Z5 se cierra en la FC máxima, y lo que la supera no se reparte
+
+Cuando hay `hr_max_bpm`, la Z5 termina ahí. Los segundos por encima quedan en
+`unclassified_seconds` en lugar de sumarse a la zona más dura.
+
+Es deliberado: una FC por encima de la máxima registrada es un artefacto del
+sensor o una FC máxima desactualizada. En ninguno de los dos casos conviene
+contarla como esfuerzo real en Z5, que es la interpretación que invitaría a
+hacer. Se reporta aparte y el bloque `method` lo dice.
+
+Esto obligó a relajar una regla: `zones.ts` exigía que la última zona quedase
+abierta. Ahora admite un techo explícito mediante `allowClosedTopZone`, que por
+defecto sigue en `false` para que ningún valor se quede fuera por olvido.
+
+**Consecuencia para los tests:** con techo, la suma por zona iguala
+`classified_seconds`, no `valid_seconds`. La fixture `16-zonas-sobre-maxima`
+comprueba justo ese caso.
+
+### D62. Un bug de prioridad de errores que el sprint destapó
+
+Al anclar las zonas de FC al umbral, una actividad **sin pulsómetro** empezó a
+devolver `MISSING_HR_THRESHOLD`: el perfil se resolvía antes de mirar si había
+señal. El usuario habría configurado su umbral para descubrir que seguía sin
+funcionar.
+
+Corregido: si no hay stream de FC no se resuelve el umbral, y el error vuelve a
+ser `MISSING_HR`. La regla general que deja el caso: **cuando faltan un dato de
+la actividad y uno del perfil, se reporta primero el de la actividad**, porque
+es el que el usuario no puede arreglar configurando nada.

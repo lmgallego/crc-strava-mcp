@@ -1,0 +1,56 @@
+{
+  "fixture": "15-zonas-frontera",
+  "description": "Un minuto en cada latido frontera y en el inmediatamente anterior.",
+  "inputs": {
+    "hr_threshold_bpm": 165,
+    "hr_max_bpm": 190
+  },
+  "zone_bounds": {
+    "Z1": [
+      0,
+      114
+    ],
+    "Z2": [
+      114,
+      139
+    ],
+    "Z3": [
+      139,
+      157
+    ],
+    "Z4": [
+      157,
+      174
+    ],
+    "Z5": [
+      174,
+      191
+    ]
+  },
+  "expected": {
+    "valid_seconds": 540,
+    "seconds_by_zone": {
+      "Z1": 60,
+      "Z2": 120,
+      "Z3": 120,
+      "Z4": 120,
+      "Z5": 120
+    },
+    "classified_seconds": 540,
+    "unclassified_seconds": 0,
+    "boundary_values": {
+      "z1_z2": 114,
+      "z2_z3": 139,
+      "z3_z4": 157,
+      "z4_z5": 174,
+      "hr_max": 190
+    }
+  },
+  "method": {
+    "cuts": "round(pct * LTHR) a latidos enteros; cada corte es tope de una zona y suelo de la siguiente",
+    "z4_top": "Z4 incluye su tope (1.05 * LTHR); Z5 empieza un latido mas arriba",
+    "z5_top": "Z5 cerrada en hr_max_bpm + 1; por encima queda sin clasificar",
+    "derivation": "segundos por zona fijados por construccion de los bloques"
+  },
+  "notes": "El latido del corte pertenece a la zona SUPERIOR. La FC maxima entra en Z5."
+}

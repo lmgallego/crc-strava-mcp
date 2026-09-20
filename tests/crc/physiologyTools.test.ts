@@ -61,6 +61,14 @@ const FTP_ENTRY = {
     effective_to: null,
     source: "manual",
 };
+const LTHR_ENTRY = {
+    metric: "hr_threshold_bpm",
+    value: 165,
+    unit: "bpm",
+    effective_from: "2026-01-01",
+    effective_to: null,
+    source: "manual",
+};
 const HRMAX_ENTRY = {
     metric: "hr_max_bpm",
     value: 190,
@@ -78,7 +86,7 @@ beforeEach(async () => {
     process.env.STRAVA_ACCESS_TOKEN = "test-token";
     dir = await fs.mkdtemp(path.join(os.tmpdir(), "crc-fisio-"));
     setStreams();
-    await useProfile([FTP_ENTRY, HRMAX_ENTRY]);
+    await useProfile([FTP_ENTRY, HRMAX_ENTRY, LTHR_ENTRY]);
 });
 
 afterEach(async () => {
@@ -158,11 +166,26 @@ describe("crc-time-in-zones", () => {
         expect(suma).toBe(r.metrics.classified_seconds);
     });
 
-    it("zonas de FC con la FC máxima del perfil", async () => {
+    it("las zonas de FC se anclan al UMBRAL, no a la FC máxima", async () => {
+        await useProfile([FTP_ENTRY, HRMAX_ENTRY, LTHR_ENTRY]);
         const r = parse(await timeInZonesTool.execute({ activityId: "123", kind: "heartrate" }));
 
-        expect(r.inputs.unit).toBe("bpm");
         expect(r.available).toBe(true);
+        expect(r.inputs.unit).toBe("bpm");
+        expect(r.inputs.reference).toBe(165);
+        expect(r.inputs.reference_metric).toBe("hr_threshold_bpm");
+        // La FC máxima solo cierra la Z5 por arriba.
+        expect(r.inputs.hr_max_bpm).toBe(190);
+    });
+
+    it("sin umbral en el perfil: MISSING_HR_THRESHOLD", async () => {
+        await useProfile([FTP_ENTRY, HRMAX_ENTRY]);
+        const result = await timeInZonesTool.execute({ activityId: "123", kind: "heartrate" });
+        const r = parse(result);
+
+        expect(r.available).toBe(false);
+        expect(r.errors.map((e: { code: string }) => e.code)).toContain("MISSING_HR_THRESHOLD");
+        expect(result).not.toHaveProperty("isError");
     });
 
     it("las zonas absolutas funcionan sin FTP: no dan MISSING_FTP", async () => {

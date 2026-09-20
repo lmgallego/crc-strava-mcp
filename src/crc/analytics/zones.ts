@@ -66,6 +66,61 @@ export const DEFAULT_HR_ZONES_PCT_MAX: ZoneDefinition[] = [
     { name: "Z5", lower: 0.9, upper: null },
 ];
 
+/**
+ * Cortes de las zonas de Coggan de FC, en fracción del umbral (LTHR):
+ * Z1 hasta 68 %, Z2 69-83 %, Z3 84-94 %, Z4 95-105 %, Z5 por encima.
+ *
+ * Se guardan los CORTES, no los extremos de cada zona: cada corte es un único
+ * número que sirve de tope de una zona y de suelo de la siguiente, así que por
+ * construcción no puede haber hueco ni solape entre ellas.
+ */
+export const COGGAN_HR_CUTS_PCT_LTHR = {
+    z1_z2: 0.69,
+    z2_z3: 0.84,
+    z3_z4: 0.95,
+    /** Último bpm que todavía es Z4; Z5 empieza en el siguiente. */
+    z4_top: 1.05,
+} as const;
+
+/**
+ * Zonas de Coggan de FC en bpm ENTEROS, ancladas al umbral.
+ *
+ * Los límites se redondean a bpm porque un pulsómetro no da decimales: hablar
+ * de "zona 4 a partir de 161,5 ppm" no significa nada sobre el terreno.
+ *
+ * `hrMax` cierra la Z5 por arriba cuando se conoce. Los valores por encima de
+ * la FC máxima registrada quedan SIN CLASIFICAR (aparecen en
+ * `unclassified_seconds`), que es lo correcto: son o un artefacto del sensor o
+ * una FC máxima desactualizada, y en ninguno de los dos casos conviene
+ * sumarlos a la zona más dura como si fueran esfuerzo real.
+ */
+export function cogganHeartRateZones(lthr: number, hrMax?: number | null): ZoneDefinition[] {
+    if (!Number.isFinite(lthr) || lthr <= 0) {
+        throw new Error(`El umbral de FC debe ser > 0 (recibido: ${lthr}).`);
+    }
+
+    const c = COGGAN_HR_CUTS_PCT_LTHR;
+    const z1z2 = Math.round(c.z1_z2 * lthr);
+    const z2z3 = Math.round(c.z2_z3 * lthr);
+    const z3z4 = Math.round(c.z3_z4 * lthr);
+    // Z4 incluye su tope, así que Z5 arranca un latido más arriba.
+    const z4z5 = Math.round(c.z4_top * lthr) + 1;
+
+    const top =
+        hrMax != null && Number.isFinite(hrMax) && hrMax >= z4z5
+            ? // +1 porque el intervalo es [lower, upper) y la FC máxima cuenta.
+              Math.round(hrMax) + 1
+            : null;
+
+    return [
+        { name: "Z1 recuperación", lower: 0, upper: z1z2 },
+        { name: "Z2 aeróbico", lower: z1z2, upper: z2z3 },
+        { name: "Z3 tempo", lower: z2z3, upper: z3z4 },
+        { name: "Z4 umbral", lower: z3z4, upper: z4z5 },
+        { name: "Z5 VO2max", lower: z4z5, upper: top },
+    ];
+}
+
 export interface TimeInZonesOptions {
     kind?: ZoneKind;
     /** Zonas con límites ABSOLUTOS (W o bpm). Tienen prioridad. */
@@ -74,6 +129,15 @@ export interface TimeInZonesOptions {
     relativeZones?: ZoneDefinition[];
     /** Referencia para las zonas relativas: FTP en W o FC máx en bpm. */
     reference?: number | null;
+    /**
+     * Permite que la última zona tenga tope en lugar de quedar abierta.
+     *
+     * Por defecto se exige abierta, para que ningún valor se quede fuera por
+     * olvido. Las zonas de FC ancladas a la FC máxima son la excepción
+     * legítima: ahí el techo es deliberado y lo que lo supera se reporta en
+     * `unclassified_seconds`.
+     */
+    allowClosedTopZone?: boolean;
 }
 
 const round = (v: number, d: number): number => {
@@ -154,7 +218,7 @@ export function computeTimeInZones(
         method["limits"] = `Zonas por defecto relativas a ${options.reference} ${unit}.`;
     }
 
-    assertContiguous(zones);
+    assertContiguous(zones, options.allowClosedTopZone ?? false);
 
     // --- Reparto ----------------------------------------------------------
     const seconds = new Array(zones.length).fill(0) as number[];
@@ -197,6 +261,13 @@ export function computeTimeInZones(
         work_kj: watts ? round(work[i]! / 1000, 2) : null,
     }));
 
+    if (unclassified > 0 && classified > 0) {
+        method["unclassified"] =
+            `${unclassified} s válidos quedaron SIN CLASIFICAR: o la señal faltaba en ese ` +
+            "segundo, o superaba el techo de la última zona. No se reparten entre las zonas " +
+            "existentes; se reportan en unclassified_seconds.";
+    }
+
     return {
         available: true,
         kind,
@@ -231,7 +302,7 @@ function zoneIndex(zones: ZoneDefinition[], value: number): number {
  * Las zonas deben cubrir [0, ∞) sin solapes ni huecos: si no, habría segundos
  * imposibles de clasificar o clasificables dos veces.
  */
-function assertContiguous(zones: ZoneDefinition[]): void {
+function assertContiguous(zones: ZoneDefinition[], allowClosedTop: boolean): void {
     if (zones.length === 0) throw new Error("Hay que definir al menos una zona.");
 
     const sorted = [...zones].sort((a, b) => a.lower - b.lower);
@@ -250,7 +321,10 @@ function assertContiguous(zones: ZoneDefinition[]): void {
             );
         }
     }
-    if (sorted[sorted.length - 1]!.upper !== null) {
-        throw new Error("La última zona debe quedar abierta (upper: null).");
+    if (sorted[sorted.length - 1]!.upper !== null && !allowClosedTop) {
+        throw new Error(
+            "La última zona debe quedar abierta (upper: null), o hay que pedir " +
+                "allowClosedTopZone para aceptar un techo explícito.",
+        );
     }
 }

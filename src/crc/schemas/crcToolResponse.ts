@@ -23,6 +23,12 @@ export const CrcErrorCode = {
      * Falta altitud o distancia, así que no se pueden detectar subidas.
      */
     MISSING_ELEVATION: "MISSING_ELEVATION",
+    /**
+     * Ampliación de la v0.2 (Sprint 10): no está en la sección 12 de la v0.1.
+     * No hay `hr_threshold_bpm` vigente, así que las zonas de FC de Coggan no
+     * pueden anclarse.
+     */
+    MISSING_HR_THRESHOLD: "MISSING_HR_THRESHOLD",
 } as const;
 
 /** Los siete códigos originales de la sección 12, sin las ampliaciones. */

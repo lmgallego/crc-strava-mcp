@@ -9,7 +9,11 @@ import { z } from "zod";
 import { computeDecoupling } from "../analytics/decoupling.js";
 import { computeTorqueCadence } from "../analytics/torqueCadence.js";
 import { computeWorkAboveFtp, DEFAULT_RANGES_PCT_FTP } from "../analytics/workAboveFtp.js";
-import { computeTimeInZones, type ZoneDefinition } from "../analytics/zones.js";
+import {
+    cogganHeartRateZones,
+    computeTimeInZones,
+    type ZoneDefinition,
+} from "../analytics/zones.js";
 import { resolveMetric } from "../profile/profileResolver.js";
 import { describeProvenance } from "../profile/provenance.js";
 import { loadProfile } from "../profile/profileStore.js";
@@ -30,7 +34,7 @@ const activityIdInput = stravaId.describe("ID de la actividad de Strava.");
 /** Resuelve una métrica del perfil por la fecha de la actividad. */
 async function resolveFromProfile(
     activity: ActivityStreams,
-    metric: "ftp_w" | "weight_kg" | "hr_max_bpm",
+    metric: "ftp_w" | "weight_kg" | "hr_max_bpm" | "hr_threshold_bpm",
 ): Promise<{
     value: number | null;
     source: unknown;
@@ -71,7 +75,9 @@ async function resolveFromProfile(
             ? CrcErrorCode.MISSING_FTP
             : metric === "weight_kg"
               ? CrcErrorCode.MISSING_WEIGHT
-              : CrcErrorCode.INVALID_PROFILE;
+              : metric === "hr_threshold_bpm"
+                ? CrcErrorCode.MISSING_HR_THRESHOLD
+                : CrcErrorCode.INVALID_PROFILE;
     return {
         value: null,
         source: null,
@@ -289,9 +295,35 @@ export const timeInZonesTool = {
 
             // Las zonas absolutas no necesitan referencia; las relativas sí.
             const needsReference = !args.zones || args.zones.length === 0;
-            if (reference === null && needsReference) {
-                const metric = kind === "heartrate" ? "hr_max_bpm" : "ftp_w";
-                const r = await resolveFromProfile(activity, metric);
+            let cogganZones: ZoneDefinition[] | undefined;
+            let hrMax: number | null = null;
+
+            // Si la actividad no trae FC, no se resuelve el umbral: el problema
+            // es la falta de señal, no la del perfil. Decir "falta hr_threshold"
+            // mandaría al usuario a configurar algo que no arreglaría nada.
+            if (
+                needsReference &&
+                kind === "heartrate" &&
+                !args.relative_zones &&
+                quality.heartrate_available
+            ) {
+                // Las zonas de Coggan de FC se anclan al UMBRAL (LTHR), no a la
+                // FC máxima: es lo que marca la intensidad fisiológica real.
+                const t = await resolveFromProfile(activity, "hr_threshold_bpm");
+                reference = args.reference ?? t.value;
+                refSource = args.reference != null ? { source: "override" } : t.source;
+                provenanceWarnings.push(...t.warnings);
+                referenceEstimated = t.estimated;
+                if (t.error && args.reference == null) errors.push(t.error);
+
+                if (reference !== null) {
+                    // La FC máxima es opcional: solo cierra la Z5 por arriba.
+                    const m = await resolveFromProfile(activity, "hr_max_bpm");
+                    hrMax = m.value;
+                    cogganZones = cogganHeartRateZones(reference, hrMax);
+                }
+            } else if (reference === null && needsReference) {
+                const r = await resolveFromProfile(activity, "ftp_w");
                 reference = r.value;
                 refSource = r.source;
                 provenanceWarnings.push(...r.warnings);
@@ -301,9 +333,10 @@ export const timeInZonesTool = {
 
             const z = computeTimeInZones(activity.aligned, {
                 kind,
-                zones: args.zones,
+                zones: args.zones ?? cogganZones,
                 relativeZones: args.relative_zones,
                 reference,
+                allowClosedTopZone: cogganZones !== undefined,
             });
 
             if (!z.available) {
@@ -312,7 +345,7 @@ export const timeInZonesTool = {
                     : !quality.power_available && kind !== "heartrate"
                       ? CrcErrorCode.MISSING_POWER
                       : kind === "heartrate"
-                        ? CrcErrorCode.INVALID_PROFILE
+                        ? CrcErrorCode.MISSING_HR_THRESHOLD
                         : CrcErrorCode.MISSING_FTP;
 
                 return json(
@@ -340,6 +373,9 @@ export const timeInZonesTool = {
                         start_date: activity.start_date,
                         kind,
                         reference,
+                        reference_metric:
+                            kind === "heartrate" && cogganZones ? "hr_threshold_bpm" : null,
+                        hr_max_bpm: hrMax,
                         unit: z.unit,
                         parameter_sources: { reference: refSource },
                     },
