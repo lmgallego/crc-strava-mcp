@@ -318,3 +318,100 @@ describe("profileStore · D26 cierre de la vigencia anterior", () => {
         );
     });
 });
+
+describe("profileStore · hr_threshold_bpm", () => {
+    const hr = (metric: string, value: number, from = "2026-01-01", to: string | null = null) => ({
+        metric,
+        value,
+        unit: "bpm",
+        effective_from: from,
+        effective_to: to,
+        source: "manual",
+    });
+
+    it("acepta un umbral de FC plausible", async () => {
+        const p = await setMetric(hr("hr_threshold_bpm", 165), { file });
+        expect(p.metrics[0]!.value).toBe(165);
+        expect(p.metrics[0]!.unit).toBe("bpm");
+    });
+
+    it("rechaza valores fuera del rango plausible", async () => {
+        await expect(setMetric(hr("hr_threshold_bpm", 40), { file })).rejects.toThrow(/rango/);
+        await expect(setMetric(hr("hr_threshold_bpm", 250), { file })).rejects.toThrow(/rango/);
+    });
+
+    it("exige la unidad correcta", async () => {
+        await expect(
+            setMetric({ ...hr("hr_threshold_bpm", 165), unit: "W" }, { file }),
+        ).rejects.toThrow(/se expresa en bpm/);
+    });
+
+    it("es una métrica distinta de aet_hr_bpm y conviven", async () => {
+        await setMetric(hr("aet_hr_bpm", 140), { file });
+        const p = await setMetric(hr("hr_threshold_bpm", 165), { file });
+
+        expect(p.metrics).toHaveLength(2);
+        expect(resolveMetric(p, "aet_hr_bpm", "2026-06-01")).toMatchObject({ value: 140 });
+        expect(resolveMetric(p, "hr_threshold_bpm", "2026-06-01")).toMatchObject({ value: 165 });
+    });
+});
+
+describe("profileStore · coherencia entre frecuencias", () => {
+    const hr = (metric: string, value: number, from = "2026-01-01", to: string | null = null) => ({
+        metric,
+        value,
+        unit: "bpm",
+        effective_from: from,
+        effective_to: to,
+        source: "manual",
+    });
+
+    it("rechaza un umbral por encima de la FC máxima", async () => {
+        await setMetric(hr("hr_max_bpm", 190), { file });
+        await expect(setMetric(hr("hr_threshold_bpm", 195), { file })).rejects.toThrow(
+            /debe ser menor/,
+        );
+    });
+
+    it("rechaza también en el otro orden de escritura", async () => {
+        await setMetric(hr("hr_threshold_bpm", 195), { file });
+        await expect(setMetric(hr("hr_max_bpm", 190), { file })).rejects.toThrow(/debe ser menor/);
+    });
+
+    it("el mensaje avisa de la confusión típica entre AeT y umbral", async () => {
+        await setMetric(hr("hr_max_bpm", 190), { file });
+        await expect(setMetric(hr("hr_threshold_bpm", 195), { file })).rejects.toThrow(
+            /aet_hr_bpm con hr_threshold_bpm/,
+        );
+    });
+
+    it("rechaza un AeT por encima del umbral", async () => {
+        await setMetric(hr("hr_threshold_bpm", 165), { file });
+        await expect(setMetric(hr("aet_hr_bpm", 170), { file })).rejects.toThrow(/debe ser menor/);
+    });
+
+    it("acepta el orden fisiológico correcto", async () => {
+        await setMetric(hr("aet_hr_bpm", 140), { file });
+        await setMetric(hr("hr_threshold_bpm", 165), { file });
+        const p = await setMetric(hr("hr_max_bpm", 190), { file });
+
+        expect(p.metrics).toHaveLength(3);
+    });
+
+    it("no compara ventanas que no se solapan", async () => {
+        // Umbral alto en 2025, máxima más baja medida en 2026: sin solape, sin conflicto.
+        await setMetric(hr("hr_threshold_bpm", 185, "2025-01-01", "2025-12-31"), { file });
+        const p = await setMetric(hr("hr_max_bpm", 180, "2026-01-01"), { file });
+
+        expect(p.metrics).toHaveLength(2);
+    });
+
+    it("no deja el perfil incoherente en disco cuando rechaza", async () => {
+        await setMetric(hr("hr_max_bpm", 190), { file });
+        await expect(setMetric(hr("hr_threshold_bpm", 195), { file })).rejects.toThrow();
+
+        const p = await loadProfile(file);
+        expect(p.metrics).toHaveLength(1);
+        expect(p.metrics[0]!.metric).toBe("hr_max_bpm");
+    });
+});

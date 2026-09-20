@@ -674,3 +674,34 @@ Cada subida necesita su potencia media y su NP. En vez de recalcularlos, se
 recorta el tramo con `sliceAlignedStreams` y se pasa a `computePowerMetrics`. El
 helper conserva la correspondencia entre señales y ajusta `start_offset_s`, de
 modo que los tiempos siguen refiriéndose a la actividad original.
+## Sprint 10 — Zonas de frecuencia cardíaca (20/09/2026) · v0.2
+
+### D56. `hr_threshold_bpm`: por qué se documenta tan insistentemente
+
+Es la FC del **segundo** umbral (LTHR). Ya existía `aet_hr_bpm`, que es la del
+**primero**. Ambas son "una FC de umbral" y se confunden con facilidad, pero
+marcan transiciones fisiológicas distintas y anclan zonas distintas: las de
+Coggan se calculan sobre el segundo, no sobre el primero.
+
+Por eso la distinción está escrita **en el propio esquema**, no solo aquí: quien
+vaya a rellenar el perfil lee la descripción del campo, no el registro de
+decisiones.
+
+Orden esperado: `aet_hr_bpm < hr_threshold_bpm < hr_max_bpm`. Rango plausible
+100-210 bpm.
+
+### D57. La coherencia entre frecuencias se valida al guardar
+
+`assertCoherentHeartRates` comprueba el orden fisiológico entre las tres FCs
+cuyas ventanas de vigencia se solapan. Un LTHR por encima de la FC máxima no es
+un dato raro: es imposible, y es exactamente el error de quien ha confundido
+`aet_hr_bpm` con `hr_threshold_bpm`. El mensaje de error lo dice con esas
+palabras.
+
+Se valida **al escribir**, no al calcular zonas, para que el perfil nunca llegue
+a contener algo incoherente. Y se comprueba en ambos sentidos: da igual cuál de
+los dos valores se guarde primero.
+
+Las ventanas que no se solapan no se comparan: un umbral alto en 2025 y una FC
+máxima más baja medida en 2026 son perfectamente compatibles.
+

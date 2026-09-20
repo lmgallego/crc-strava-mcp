@@ -26,7 +26,21 @@ export const METRIC_SPECS = {
     ftp_w: { unit: "W", min: 50, max: 600 },
     weight_kg: { unit: "kg", min: 30, max: 200 },
     hr_max_bpm: { unit: "bpm", min: 120, max: 230 },
+    /**
+     * FC del SEGUNDO umbral (umbral funcional / LTHR): la máxima que se
+     * sostiene en estado estable, en torno a una hora de esfuerzo.
+     *
+     * NO confundir con `aet_hr_bpm`, que es la del PRIMER umbral (aeróbico),
+     * bastante más baja. Se prestan a confusión porque ambas son "una FC de
+     * umbral", pero marcan transiciones fisiológicas distintas y anclan zonas
+     * distintas: las zonas de Coggan de FC se calculan sobre ESTA, no sobre
+     * la de AeT.
+     *
+     * Orden esperado: aet_hr_bpm < hr_threshold_bpm < hr_max_bpm.
+     */
+    hr_threshold_bpm: { unit: "bpm", min: 100, max: 210 },
     aet_power_w: { unit: "W", min: 50, max: 500 },
+    /** FC del PRIMER umbral (aeróbico). Ver la nota de `hr_threshold_bpm`. */
     aet_hr_bpm: { unit: "bpm", min: 80, max: 200 },
     map_w: { unit: "W", min: 100, max: 700 },
 } as const;
@@ -126,6 +140,51 @@ export function assertNoOverlap(metrics: MetricEntry[]): void {
     }
 }
 
+/**
+ * Orden fisiológico que deben respetar las tres frecuencias, de menor a mayor.
+ * Solo se comprueban las que existan y cuyas ventanas se solapen.
+ */
+const HR_ORDER: { metric: MetricName; label: string }[] = [
+    { metric: "aet_hr_bpm", label: "FC del primer umbral (AeT)" },
+    { metric: "hr_threshold_bpm", label: "FC de umbral (LTHR)" },
+    { metric: "hr_max_bpm", label: "FC máxima" },
+];
+
+/** ¿Se solapan las ventanas de vigencia de dos entradas? */
+function windowsOverlap(a: MetricEntry, b: MetricEntry): boolean {
+    const aEnd = a.effective_to ?? "9999-12-31";
+    const bEnd = b.effective_to ?? "9999-12-31";
+    return a.effective_from <= bEnd && b.effective_from <= aEnd;
+}
+
+/**
+ * Comprueba que las frecuencias cardíacas guardan el orden fisiológico.
+ *
+ * Un LTHR por encima de la FC máxima no es un dato raro: es un dato
+ * imposible, y además es el error típico de quien confunde `aet_hr_bpm` con
+ * `hr_threshold_bpm`. Se caza al guardar, no al calcular zonas, para que el
+ * perfil no llegue a contener algo incoherente.
+ */
+export function assertCoherentHeartRates(metrics: MetricEntry[]): void {
+    for (let i = 0; i < HR_ORDER.length - 1; i++) {
+        for (let j = i + 1; j < HR_ORDER.length; j++) {
+            const lower = HR_ORDER[i]!;
+            const upper = HR_ORDER[j]!;
+            for (const a of metrics.filter((m) => m.metric === lower.metric)) {
+                for (const b of metrics.filter((m) => m.metric === upper.metric)) {
+                    if (!windowsOverlap(a, b)) continue;
+                    if (a.value < b.value) continue;
+                    throw new InvalidProfileError(
+                        `${lower.label} (${a.value} bpm desde ${a.effective_from}) debe ser menor ` +
+                            `que la ${upper.label} (${b.value} bpm desde ${b.effective_from}), y sus ` +
+                            "ventanas se solapan. Revisa si has confundido aet_hr_bpm con hr_threshold_bpm.",
+                    );
+                }
+            }
+        }
+    }
+}
+
 /** Lee el perfil. Si no existe, devuelve uno vacío (no es un error). */
 export async function loadProfile(file: string = PROFILE_FILE): Promise<PerformanceProfile> {
     let text: string;
@@ -150,6 +209,7 @@ export async function loadProfile(file: string = PROFILE_FILE): Promise<Performa
         );
     }
     assertNoOverlap(parsed.data.metrics);
+    assertCoherentHeartRates(parsed.data.metrics);
     return parsed.data;
 }
 
@@ -165,6 +225,7 @@ export async function saveProfile(
         );
     }
     assertNoOverlap(parsed.data.metrics);
+    assertCoherentHeartRates(parsed.data.metrics);
 
     await fs.mkdir(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
@@ -256,6 +317,7 @@ export async function setMetric(
 
     // Valida el solape ANTES de tocar el disco.
     assertNoOverlap(metrics);
+    assertCoherentHeartRates(metrics);
 
     const updated: PerformanceProfile = { metrics };
     await saveProfile(updated, file);
