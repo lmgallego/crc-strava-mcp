@@ -202,6 +202,9 @@ export function detectClimbs(
             `Se conservan los tramos con al menos ${minGain} m de desnivel, ${minLength} m de ` +
             `longitud y ${minGrade} % de pendiente media.`,
         max_sustained_grade: `Mejor pendiente media sostenida en ${sustainedDist} m, no el pico instantáneo.`,
+        difficulty:
+            "Índice propio: pendiente_media_%² × distancia_km. La pendiente va al cuadrado " +
+            "porque determina la dureza más que la distancia. NO es una categorización oficial.",
         invalid_segments: "Un tramo no válido rompe la subida: no se sabe qué ocurrió en él.",
         power: "Las métricas de potencia se calculan con powerMetrics sobre el tramo recortado.",
         interpretation: "Sin interpretación: se devuelven los tramos y sus métricas.",
@@ -306,7 +309,7 @@ export function detectClimbs(
             wkg = pm.average_wkg;
         }
 
-        const score = (distM / 1000) * avgGrade;
+        const score = difficultyScore(avgGrade, distM);
 
         climbs.push({
             start_time_s: c.from + aligned.meta.start_offset_s,
@@ -387,20 +390,34 @@ function maxSustainedGrade(
 }
 
 /**
- * Escala de dificultad PROPIA de este proyecto.
+ * Índice de dificultad PROPIO de este proyecto.
  *
- * Se basa en el producto distancia(km) × pendiente media(%), que es la idea que
- * sustenta la mayoría de escalas al uso, pero los cortes son nuestros.
+ * `pendiente_media_%² × distancia_km`. La pendiente va al cuadrado porque es lo
+ * que determina la dureza: doblar la pendiente cuesta mucho más que doblar la
+ * distancia, y el producto lineal anterior no lo recogía (ver D63).
  */
+export function difficultyScore(avgGradePct: number, distanceM: number): number {
+    return avgGradePct * avgGradePct * (distanceM / 1000);
+}
+
 export const DIFFICULTY_SCALE_NOTE =
-    "Escala propia de CRC (distancia_km × pendiente_media_%). Aproximación interna: " +
+    "Escala propia de CRC (pendiente_media_%² × distancia_km). Aproximación interna: " +
     "NO es la categorización oficial de la UCI ni de ninguna otra organización ciclista, " +
     "y no debe presentarse como tal.";
 
+/**
+ * Cortes de la escala, recalibrados para la fórmula cuadrática.
+ *
+ * Referencias que los sitúan: 500 m al 3 % (el mínimo detectable) da 4,5;
+ * 5 km al 6 % da 180; 10 km al 6 % da 360; Alpe dHuez (13,8 km al 8,1 %) da
+ * unos 905; Angliru (12,5 km al 9,8 %) unos 1200.
+ */
+export const DIFFICULTY_CUTS = { suave: 20, media: 100, dura: 300, muy_dura: 700 } as const;
+
 export function classify(score: number): ClimbTier {
-    if (score >= 80) return "muy dura";
-    if (score >= 40) return "dura";
-    if (score >= 16) return "media";
-    if (score >= 6) return "suave";
+    if (score >= DIFFICULTY_CUTS.muy_dura) return "muy dura";
+    if (score >= DIFFICULTY_CUTS.dura) return "dura";
+    if (score >= DIFFICULTY_CUTS.media) return "media";
+    if (score >= DIFFICULTY_CUTS.suave) return "suave";
     return "corta";
 }

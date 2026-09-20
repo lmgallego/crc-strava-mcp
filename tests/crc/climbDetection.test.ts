@@ -251,12 +251,13 @@ describe("detectClimbs · umbrales y escala", () => {
         expect(r.climbs[0]!.difficulty_tier).not.toMatch(/HC|cat|categor[íi]a \d/i);
     });
 
-    it("la escala ordena por producto distancia × pendiente", () => {
-        expect(classify(3)).toBe("corta");
-        expect(classify(10)).toBe("suave");
-        expect(classify(30)).toBe("media");
-        expect(classify(50)).toBe("dura");
-        expect(classify(120)).toBe("muy dura");
+    it("la escala ordena por pendiente² × distancia (D63)", () => {
+        // Cortes recalibrados al pasar de producto lineal a cuadrático.
+        expect(classify(5)).toBe("corta");
+        expect(classify(50)).toBe("suave");
+        expect(classify(180)).toBe("media");
+        expect(classify(400)).toBe("dura");
+        expect(classify(900)).toBe("muy dura");
     });
 
     it("no interpreta el resultado", () => {

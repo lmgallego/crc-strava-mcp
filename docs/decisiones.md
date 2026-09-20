@@ -776,3 +776,44 @@ valor más fiable.
 Redactados como alcance del método, no como error de cálculo. Hay un test que
 falla si el texto empieza a hablar de "error" o "fallo".
 
+
+## Sprint 11 — Métricas de subidas (20/09/2026) · v0.2
+
+Métricas que venían de un script de análisis de puertos ya en uso. Adaptadas a
+las reglas del proyecto, no copiadas: funciones puras en `analytics/`, sin
+interpretación en la salida y consumiendo `powerMetrics` para el NP.
+
+### D63. El índice de dificultad pasa a ser cuadrático en la pendiente
+
+**Antes:** `distancia_km × pendiente_media_%`.
+**Ahora:** `pendiente_media_%² × distancia_km`.
+
+El producto lineal trataba pendiente y distancia como intercambiables: 10 km al
+6 % y 5 km al 12 % daban exactamente lo mismo (60). Sobre la bici no se parecen
+en nada. Doblar la pendiente no duplica el esfuerzo, lo dispara: sube la
+potencia necesaria para avanzar, obliga a cambiar de desarrollo y a menudo a
+levantarse. Elevarla al cuadrado recoge eso; la distancia sigue entrando en
+lineal, que es como se comporta.
+
+Con la fórmula nueva esos dos ejemplos dan 360 y 720: el doble, que es el orden
+de diferencia que percibe quien los sube.
+
+**Cortes recalibrados**, porque la escala de los números cambia por completo:
+
+| Etiqueta | Corte | Referencia que lo sitúa |
+|---|---|---|
+| corta | < 20 | 500 m al 3 % (el mínimo detectable) da 4,5 |
+| suave | 20 | 2 km al 6 % da 72 |
+| media | 100 | 5 km al 6 % da 180 |
+| dura | 300 | 10 km al 6 % da 360 |
+| muy dura | 700 | Alpe d'Huez unos 905; Angliru unos 1200 |
+
+Se mantiene todo lo demás de [D41](#d41-la-escala-de-dificultad-es-propia-y-se-dice-en-cada-respuesta):
+etiquetas en palabras comunes, `difficulty_scale` en cada subida diciendo que no
+es la categorización oficial de nadie, y el test que falla si una etiqueta
+empieza a parecerse a una categoría de federación.
+
+**Aviso para quien compare informes antiguos:** los valores de
+`difficulty_score` anteriores a este sprint NO son comparables con los nuevos.
+La etiqueta de una misma subida puede cambiar.
+

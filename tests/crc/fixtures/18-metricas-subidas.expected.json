@@ -1,0 +1,55 @@
+{
+  "fixture": "18-metricas-subidas",
+  "description": "Tres subidas identicas de 2 km al 6 % con potencia y FC decrecientes, para que las pendientes de regresion sean exactas.",
+  "inputs": {
+    "weight_kg": 70.0,
+    "speed_m_s": 5.0
+  },
+  "expected": {
+    "climb_count": 3,
+    "per_climb": {
+      "distance_m": 2000,
+      "elevation_gain_m": 120.0,
+      "avg_grade_pct": 6.0,
+      "duration_s": 400,
+      "vam_m_per_h": 1080.0,
+      "difficulty_score": 72.0,
+      "difficulty_tier": "suave"
+    },
+    "power_by_climb": [
+      280,
+      260,
+      240
+    ],
+    "hr_by_climb": [
+      150,
+      156,
+      162
+    ],
+    "efficiency_index_by_climb": [
+      270.0,
+      290.77,
+      315.0
+    ],
+    "trend_power": {
+      "slope": -20.0,
+      "intercept": 280.0,
+      "n": 3,
+      "r_squared": 1.0
+    },
+    "trend_hr": {
+      "slope": 6.0,
+      "intercept": 150.0,
+      "n": 3,
+      "r_squared": 1.0
+    }
+  },
+  "method": {
+    "difficulty": "pendiente_% ^ 2 * distancia_km",
+    "vam": "desnivel / (duracion_h)",
+    "ei": "VAM / (W/kg)",
+    "trend": "regresion lineal sobre el indice de subida (0, 1, 2)",
+    "derivation": "valores derivados de la construccion, no del detector"
+  },
+  "notes": "Con potencias equiespaciadas (280, 260, 240) la pendiente de la regresion es exactamente -20 W por subida y el ajuste es perfecto (r2 = 1). Lo mismo con la FC: +6 bpm por subida."
+}
