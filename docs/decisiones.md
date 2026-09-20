@@ -750,3 +750,29 @@ Corregido: si no hay stream de FC no se resuelve el umbral, y el error vuelve a
 ser `MISSING_HR`. La regla general que deja el caso: **cuando faltan un dato de
 la actividad y uno del perfil, se reporta primero el de la actividad**, porque
 es el que el usuario no puede arreglar configurando nada.
+### D60. `bestEffortInPeriod` admite la señal de FC
+
+En vez de escribir un segundo barrido, se añadió el parámetro `signal`
+(`watts` | `heartrate`). La matemática de la ventana móvil es idéntica, así que
+la señal elegida se pasa en el hueco de `watts` a `computePowerCurve` y se
+reutiliza el algoritmo entero.
+
+Diferencia importante: con `heartrate` **no** se exige `device_watts === true`.
+Exigirlo dejaría fuera a quien rueda con pulsómetro y sin potenciómetro, que es
+precisamente a quien más le sirve estimar su umbral de FC.
+
+Ventana por defecto de **un año** frente a los 90 días del FTP, porque la FC de
+umbral se mueve mucho menos a lo largo de una temporada. A cambio son muchas más
+actividades: el tope por defecto baja a 40 y la caché no es opcional.
+
+### D61. La advertencia sobre la FC es un límite del método, no un fallo
+
+`crc-estimate-hr-threshold` devuelve siempre `quality.method_limitations` con
+tres avisos: que la FC se desplaza con el calor, la deshidratación, la altitud o
+la fatiga sin que cambie la forma física; que el mejor 20 min de FC puede no
+corresponder a un esfuerzo de umbral; y que un test de campo declarado da un
+valor más fiable.
+
+Redactados como alcance del método, no como error de cálculo. Hay un test que
+falla si el texto empieza a hablar de "error" o "fallo".
+

@@ -11,7 +11,12 @@ import { z } from "zod";
 
 import { bestEffortInPeriod, DEFAULT_MAX_ACTIVITIES, DEFAULT_WINDOW_DAYS } from "../analytics/bestEffort.js";
 import { computePowerCurve } from "../analytics/powerCurve.js";
-import { estimateFtpFrom20Min, estimateVo2max } from "../analytics/vo2maxEstimate.js";
+import {
+    estimateFtpFrom20Min,
+    estimateHrThresholdFrom20Min,
+    estimateVo2max,
+    LTHR_FROM_20MIN_FACTOR,
+} from "../analytics/vo2maxEstimate.js";
 import { resolveMetric } from "../profile/profileResolver.js";
 import { loadProfile } from "../profile/profileStore.js";
 import {
@@ -33,6 +38,18 @@ export const CRC_VERSION = "0.1.0";
 /** Duraciones de los dos esfuerzos que usan estas herramientas. */
 const VO2MAX_DURATION_S = 300;
 const FTP_DURATION_S = 1200;
+const HR_THRESHOLD_DURATION_S = 1200;
+
+/**
+ * Ventana por defecto para el umbral de FC: un anio.
+ *
+ * Mas larga que los 90 dias del FTP porque la FC de umbral se mueve mucho
+ * menos a lo largo de una temporada que la potencia. A cambio son muchas mas
+ * actividades, asi que el tope por defecto es mas bajo y la cache no es
+ * opcional.
+ */
+const HR_THRESHOLD_WINDOW_DAYS = 365;
+const HR_THRESHOLD_MAX_ACTIVITIES = 40;
 
 // --- crc-estimate-vo2max --------------------------------------------------
 
@@ -247,6 +264,116 @@ export const estimateFtpTool = {
     },
 };
 
+// --- crc-estimate-hr-threshold -------------------------------------------
+
+export const estimateHrThresholdTool = {
+    name: "crc-estimate-hr-threshold",
+    description:
+        "Propone la FC de umbral (LTHR) a partir de la mejor FC media de 20 min del historial " +
+        `(× ${LTHR_FROM_20MIN_FACTOR}), para quien no la conoce. NO GUARDA NADA: devuelve la ` +
+        "propuesta con la actividad y la fecha de origen. Para persistirla hay que llamar aparte " +
+        'a crc-set-performance-profile con source "estimated_hr20min".',
+    inputSchema: z.object({
+        mode: z
+            .enum(["activity", "rolling_period"])
+            .optional()
+            .describe("'activity' analiza una actividad; 'rolling_period' barre un periodo."),
+        activityId: stravaId.optional().describe("Actividad a analizar en modo 'activity'."),
+        days: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(`Ventana en días. Por defecto ${HR_THRESHOLD_WINDOW_DAYS} (un año).`),
+        max_activities: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe(
+                `Tope de actividades a analizar. Por defecto ${HR_THRESHOLD_MAX_ACTIVITIES}: ` +
+                    "un año son muchas más actividades que los 90 días del FTP.",
+            ),
+        factor: z
+            .number()
+            .positive()
+            .optional()
+            .describe(`Factor aplicado al mejor 20 min. Por defecto ${LTHR_FROM_20MIN_FACTOR}.`),
+    }),
+    execute: async (args: {
+        mode?: "activity" | "rolling_period";
+        activityId?: string;
+        days?: number;
+        max_activities?: number;
+        factor?: number;
+    }) => {
+        try {
+            const mode = args.mode ?? (args.activityId ? "activity" : "rolling_period");
+            const warnings: string[] = [];
+
+            const effort = await findBestEffort(
+                HR_THRESHOLD_DURATION_S,
+                mode,
+                {
+                    ...args,
+                    days: args.days ?? HR_THRESHOLD_WINDOW_DAYS,
+                    max_activities: args.max_activities ?? HR_THRESHOLD_MAX_ACTIVITIES,
+                },
+                warnings,
+                "heartrate",
+            );
+            if ("failure" in effort) return json(effort.failure);
+
+            // `power_w` es el nombre del campo genérico del mejor esfuerzo;
+            // con signal "heartrate" contiene bpm, no vatios.
+            const h = estimateHrThresholdFrom20Min(effort.power_w, { factor: args.factor });
+
+            return json(
+                crcToolResponse({
+                    tool: "crc-estimate-hr-threshold",
+                    version: CRC_VERSION,
+                    activity_id: effort.activity_id,
+                    inputs: {
+                        mode,
+                        days:
+                            mode === "rolling_period"
+                                ? (args.days ?? HR_THRESHOLD_WINDOW_DAYS)
+                                : null,
+                        max_activities: args.max_activities ?? HR_THRESHOLD_MAX_ACTIVITIES,
+                        factor: h.factor,
+                    },
+                    method: { ...h.method, ...effort.method },
+                    metrics: {
+                        best_20min_hr_bpm: h.best_20min_hr_bpm,
+                        factor: h.factor,
+                        estimated_hr_threshold_bpm: h.estimated_hr_threshold_bpm,
+                        source_activity_id: effort.activity_id,
+                        effort_start: effort.start_time_s,
+                        effort_date: effort.activity_date,
+                        persisted: false,
+                        to_persist: {
+                            tool: "crc-set-performance-profile",
+                            metric: "hr_threshold_bpm",
+                            value: h.estimated_hr_threshold_bpm,
+                            unit: "bpm",
+                            source: h.suggested_source,
+                            effective_from: effort.activity_date.slice(0, 10),
+                        },
+                    },
+                    quality: {
+                        ...effort.quality,
+                        // La FC es sensible al contexto: el límite se declara siempre.
+                        method_limitations: h.limitations,
+                        warnings: [...warnings, ...h.warnings, ...effort.warnings],
+                    },
+                }),
+            );
+        } catch (err) {
+            return failure(err, "crc-estimate-hr-threshold");
+        }
+    },
+};
+
 // --- helpers --------------------------------------------------------------
 
 interface FoundEffort {
@@ -266,8 +393,14 @@ async function findBestEffort(
     mode: "activity" | "rolling_period",
     args: { activityId?: string; days?: number; max_activities?: number },
     warnings: string[],
+    signal: "watts" | "heartrate" = "watts",
 ): Promise<FoundEffort | { failure: unknown }> {
-    const toolName = durationS === VO2MAX_DURATION_S ? "crc-estimate-vo2max" : "crc-estimate-ftp";
+    const toolName =
+        signal === "heartrate"
+            ? "crc-estimate-hr-threshold"
+            : durationS === VO2MAX_DURATION_S
+              ? "crc-estimate-vo2max"
+              : "crc-estimate-ftp";
 
     if (mode === "activity") {
         if (!args.activityId) {
@@ -288,7 +421,22 @@ async function findBestEffort(
             deviceWatts: activity.device_watts,
         });
 
-        if (quality.power_source !== "measured") {
+        if (signal === "heartrate" && !quality.heartrate_available) {
+            return {
+                failure: crcUnavailable({
+                    tool: toolName,
+                    version: CRC_VERSION,
+                    activity_id: activity.activity_id,
+                    inputs: { mode, activityId: activity.activity_id },
+                    code: CrcErrorCode.MISSING_HR,
+                    message: "La actividad no tiene stream de frecuencia cardiaca.",
+                    quality: { ...quality },
+                }),
+            };
+        }
+
+        // La potencia medida solo se exige cuando se analiza la potencia.
+        if (signal === "watts" && quality.power_source !== "measured") {
             return {
                 failure: crcUnavailable({
                     tool: toolName,
@@ -303,7 +451,11 @@ async function findBestEffort(
             };
         }
 
-        const curve = computePowerCurve(activity.aligned, { durations: [durationS] });
+        const source =
+            signal === "watts"
+                ? activity.aligned
+                : { ...activity.aligned, watts: activity.aligned.heartrate };
+        const curve = computePowerCurve(source, { durations: [durationS] });
         const entry = curve.entries[durationS];
         if (!entry?.available || entry.best_power_w === null) {
             return {
@@ -333,6 +485,7 @@ async function findBestEffort(
 
     // rolling_period: barrido compartido.
     const result = await bestEffortInPeriod(durationS, args.days ?? DEFAULT_WINDOW_DAYS, {
+        signal,
         maxActivities: args.max_activities,
         providers: stravaBestEffortProviders(),
     });

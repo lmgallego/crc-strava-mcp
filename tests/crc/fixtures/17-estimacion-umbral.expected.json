@@ -1,0 +1,44 @@
+{
+  "fixture": "17-estimacion-umbral",
+  "description": "Bloque de 20 min a 170 bpm rodeado de tramos mas suaves.",
+  "inputs": {
+    "hr_threshold_bpm": 165,
+    "hr_max_bpm": 190
+  },
+  "zone_bounds": {
+    "Z1": [
+      0,
+      114
+    ],
+    "Z2": [
+      114,
+      139
+    ],
+    "Z3": [
+      139,
+      157
+    ],
+    "Z4": [
+      157,
+      174
+    ],
+    "Z5": [
+      174,
+      191
+    ]
+  },
+  "expected": {
+    "valid_seconds": 2700,
+    "best_20min_hr_bpm": 170.0,
+    "best_20min_start_time_s": 900,
+    "factor": 0.98,
+    "estimated_hr_threshold_bpm": 167
+  },
+  "method": {
+    "cuts": "round(pct * LTHR) a latidos enteros; cada corte es tope de una zona y suelo de la siguiente",
+    "z4_top": "Z4 incluye su tope (1.05 * LTHR); Z5 empieza un latido mas arriba",
+    "z5_top": "Z5 cerrada en hr_max_bpm + 1; por encima queda sin clasificar",
+    "derivation": "segundos por zona fijados por construccion de los bloques"
+  },
+  "notes": "170 * 0.98 = 166.6, que redondea a 167 bpm. El mejor 20 min esta en t=900."
+}

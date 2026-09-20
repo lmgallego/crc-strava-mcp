@@ -183,3 +183,84 @@ export function estimateFtpFrom20Min(
         warnings,
     };
 }
+
+// --- Umbral de frecuencia cardíaca ---------------------------------------
+
+/**
+ * Factor estándar para estimar el LTHR desde el mejor 20 min de FC.
+ *
+ * El 0,98 sale de la misma familia de protocolos que el 0,95 del FTP: en un
+ * esfuerzo de 20 min la FC se sostiene más cerca del umbral de lo que lo hace
+ * la potencia, porque la deriva cardíaca ya ha ocurrido en su mayor parte.
+ */
+export const LTHR_FROM_20MIN_FACTOR = 0.98;
+
+/**
+ * Límites del método, que viajan en `quality`.
+ *
+ * No son fallos del cálculo: acotan cuándo el número significa lo que parece.
+ */
+export const HR_THRESHOLD_LIMITATIONS: readonly string[] = [
+    "La frecuencia cardíaca depende del contexto: calor, deshidratación, altitud, " +
+        "fatiga acumulada, cafeína o estrés la desplazan varios latidos sin que la " +
+        "condición física haya cambiado. Dos salidas al mismo esfuerzo pueden dar " +
+        "umbrales distintos.",
+    "El mejor 20 min de FC no es necesariamente un esfuerzo de umbral: puede salir de " +
+        "una salida en calor, de una subida corta encadenada o de un día de fatiga, " +
+        "donde la FC sube sin que la intensidad sea la del umbral.",
+    "Un test de campo declarado (20 min a tope, en condiciones controladas) da un valor " +
+        "más fiable que esta estimación sobre el historial.",
+];
+
+export interface HrThresholdEstimateResult {
+    best_20min_hr_bpm: number;
+    factor: number;
+    estimated_hr_threshold_bpm: number;
+    /** Valor de `source` con el que debe guardarse si el usuario confirma. */
+    suggested_source: string;
+    method: Record<string, string>;
+    limitations: readonly string[];
+    warnings: string[];
+}
+
+/**
+ * LTHR estimado = mejor FC media de 20 min × 0,98.
+ *
+ * Devuelve una PROPUESTA. Persistirla exige una llamada aparte a
+ * `crc-set-performance-profile` (D12): calcular y persistir van separados.
+ */
+export function estimateHrThresholdFrom20Min(
+    best20MinHrBpm: number,
+    options: { factor?: number } = {},
+): HrThresholdEstimateResult {
+    const factor = options.factor ?? LTHR_FROM_20MIN_FACTOR;
+
+    if (!Number.isFinite(best20MinHrBpm) || best20MinHrBpm <= 0) {
+        throw new Error(`best20MinHrBpm debe ser > 0 (recibido: ${best20MinHrBpm}).`);
+    }
+    if (!Number.isFinite(factor) || factor <= 0) {
+        throw new Error(`El factor debe ser > 0 (recibido: ${factor}).`);
+    }
+
+    return {
+        best_20min_hr_bpm: Math.round(best20MinHrBpm * 100) / 100,
+        factor,
+        // En bpm enteros: un pulsómetro no da decimales.
+        estimated_hr_threshold_bpm: Math.round(best20MinHrBpm * factor),
+        suggested_source: "estimated_hr20min",
+        method: {
+            formula: `LTHR ≈ mejor FC media de 20 min × ${factor}.`,
+            factor: "El factor es configurable; el valor usado se declara en esta misma salida.",
+            persistence:
+                "Esta herramienta NO escribe en el perfil. Guardar exige una llamada explícita " +
+                "y separada a crc-set-performance-profile.",
+            rounding: "El resultado se redondea a latidos enteros.",
+        },
+        limitations: HR_THRESHOLD_LIMITATIONS,
+        warnings: [
+            ...HR_THRESHOLD_LIMITATIONS,
+            "Propuesta NO guardada. Para persistirla, llama a crc-set-performance-profile con " +
+                'source "estimated_hr20min".',
+        ],
+    };
+}

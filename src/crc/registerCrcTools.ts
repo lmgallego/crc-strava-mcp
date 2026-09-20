@@ -5,7 +5,11 @@ import {
     setPerformanceProfileTool,
 } from "./tools/performanceProfileTools.js";
 import { detectClimbsTool } from "./tools/climbTools.js";
-import { estimateFtpTool, estimateVo2maxTool } from "./tools/estimateTools.js";
+import {
+    estimateFtpTool,
+    estimateHrThresholdTool,
+    estimateVo2maxTool,
+} from "./tools/estimateTools.js";
 import {
     analyzeCyclingActivityTool,
     compareActivitiesTool,
@@ -37,6 +41,7 @@ export function registerCrcTools(server: McpServer): void {
         workAboveFtpTool,
         estimateVo2maxTool,
         estimateFtpTool,
+        estimateHrThresholdTool,
         analyzeCyclingActivityTool,
         compareActivitiesTool,
         detectClimbsTool,

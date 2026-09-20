@@ -39,7 +39,20 @@ export interface BestEffortProviders {
     loadStreams: (activityId: string) => Promise<EffortStreams>;
 }
 
+/**
+ * Señal sobre la que se busca el mejor esfuerzo.
+ *
+ * `watts` exige potencia medida (`device_watts === true`), porque una potencia
+ * estimada no sirve para estimar nada. `heartrate` no lo exige: el pulsómetro
+ * es independiente del medidor de potencia, y pedirlo dejaría fuera a quien
+ * rueda con pulsómetro y sin potenciómetro, que es justo a quien más le sirve
+ * estimar su umbral de FC.
+ */
+export type EffortSignal = "watts" | "heartrate";
+
 export interface BestEffortOptions {
+    /** Señal a analizar. Por defecto `watts`. */
+    signal?: EffortSignal;
     /** Ventana hacia atrás, en días. Por defecto 90. */
     days?: number;
     /** Tope de actividades a descargar. Por defecto 30. */
@@ -104,6 +117,8 @@ export async function bestEffortInPeriod(
         throw new Error(`days debe ser > 0 (recibido: ${days}).`);
     }
 
+    const signal: EffortSignal = options.signal ?? "watts";
+    const requiresMeasuredPower = signal === "watts";
     const maxActivities = options.maxActivities ?? DEFAULT_MAX_ACTIVITIES;
     const now = options.now ?? new Date();
     const from = new Date(now.getTime() - days * 24 * 3600 * 1000);
@@ -116,8 +131,10 @@ export async function bestEffortInPeriod(
             `${days} días, con un tope de ${maxActivities} actividades.`,
         windows:
             "Las ventanas móviles no cruzan tramos no válidos (misma regla que la power curve).",
-        power_source:
-            "Solo se analizan actividades con device_watts = true: la potencia estimada no sirve.",
+        signal: `Mejor media sostenida de la señal ${signal}.`,
+        power_source: requiresMeasuredPower
+            ? "Solo se analizan actividades con device_watts = true: la potencia estimada no sirve."
+            : "No se exige potencia medida: la señal analizada no es la potencia.",
         cache: "Los streams se leen de la caché de disco cuando están disponibles.",
     };
 
@@ -135,7 +152,7 @@ export async function bestEffortInPeriod(
     let analysed = 0;
 
     for (const ref of listed) {
-        if (ref.device_watts !== true) {
+        if (requiresMeasuredPower && ref.device_watts !== true) {
             skipped.push({
                 activity_id: ref.activity_id,
                 reason:
@@ -160,21 +177,31 @@ export async function bestEffortInPeriod(
             continue;
         }
 
-        if (streams.device_watts !== true) {
+        if (requiresMeasuredPower && streams.device_watts !== true) {
             skipped.push({
                 activity_id: ref.activity_id,
                 reason: "Potencia no medida según los datos de la actividad.",
             });
             continue;
         }
-        if (!streams.aligned.watts) {
-            skipped.push({ activity_id: ref.activity_id, reason: "Sin stream de potencia." });
+        if (!streams.aligned[signal]) {
+            skipped.push({
+                activity_id: ref.activity_id,
+                reason: `Sin stream de ${signal === "watts" ? "potencia" : "frecuencia cardíaca"}.`,
+            });
             continue;
         }
 
         analysed++;
 
-        const curve = computePowerCurve(streams.aligned, { durations: [durationS] });
+        // `computePowerCurve` busca la mejor media sostenida sobre `watts`. Para
+        // otra señal se le pasa esa señal en el hueco de watts: la matemática de
+        // la ventana móvil es la misma y así no se duplica el algoritmo.
+        const source =
+            signal === "watts"
+                ? streams.aligned
+                : { ...streams.aligned, watts: streams.aligned[signal] };
+        const curve = computePowerCurve(source, { durations: [durationS] });
         const entry = curve.entries[durationS];
         if (!entry || !entry.available || entry.best_power_w === null) {
             skipped.push({
@@ -209,7 +236,8 @@ export async function bestEffortInPeriod(
             reason:
                 listed.length === 0
                     ? `No hay actividades en los últimos ${days} días.`
-                    : `Ninguna actividad del periodo tiene un esfuerzo válido de ${durationS} s con potencia medida.`,
+                    : `Ninguna actividad del periodo tiene un esfuerzo válido de ${durationS} s ` +
+                      `en la señal ${signal}.`,
         };
     }
 
