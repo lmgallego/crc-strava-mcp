@@ -35,6 +35,12 @@ export const DEFAULT_SUSTAINED_GRADE_DISTANCE_M = 200;
 export const DEFAULT_GRADE_WINDOW_M = 50;
 
 export interface ClimbDetectionOptions {
+    /**
+     * `true` solo si la potencia es medida (`device_watts === true`).
+     * Sin esto no se calcula el índice de eficiencia: con potencia estimada
+     * el cociente heredaría el error del modelo de Strava.
+     */
+    powerIsMeasured?: boolean;
     minElevationGainM?: number;
     minAvgGradePct?: number;
     minLengthM?: number;
@@ -70,6 +76,8 @@ export interface Climb {
     average_power_w: number | null;
     normalized_power_w: number | null;
     average_wkg: number | null;
+    /** VAM / (W/kg). Solo con potencia medida y peso vigente. */
+    efficiency_index: number | null;
 }
 
 export interface ClimbDetectionResult {
@@ -90,6 +98,9 @@ const round = (v: number, d: number): number => {
     const f = 10 ** d;
     return Math.round(v * f) / f;
 };
+
+const roundOrNull = (v: number | null, d: number): number | null =>
+    v === null ? null : round(v, d);
 
 /**
  * Media móvil centrada con ventana simétrica truncada en los bordes.
@@ -205,6 +216,9 @@ export function detectClimbs(
         difficulty:
             "Índice propio: pendiente_media_%² × distancia_km. La pendiente va al cuadrado " +
             "porque determina la dureza más que la distancia. NO es una categorización oficial.",
+        efficiency_index:
+            "EI = VAM / (W/kg). Compara subidas del MISMO ciclista entre sí; no sirve para " +
+            "comparar ciclistas, porque depende de posición, bici, viento y pendiente.",
         invalid_segments: "Un tramo no válido rompe la subida: no se sabe qué ocurrió en él.",
         power: "Las métricas de potencia se calculan con powerMetrics sobre el tramo recortado.",
         interpretation: "Sin interpretación: se devuelven los tramos y sus métricas.",
@@ -326,6 +340,10 @@ export function detectClimbs(
             average_power_w: avgPower,
             normalized_power_w: np,
             average_wkg: wkg,
+            efficiency_index:
+                options.powerIsMeasured === true && wkg !== null
+                    ? roundOrNull(efficiencyIndex(vam, wkg), 2)
+                    : null,
         });
     }
 
@@ -420,4 +438,73 @@ export function classify(score: number): ClimbTier {
     if (score >= DIFFICULTY_CUTS.media) return "media";
     if (score >= DIFFICULTY_CUTS.suave) return "suave";
     return "corta";
+}
+
+/**
+ * Índice de eficiencia: VAM [m/h] / (W/kg).
+ *
+ * Compara subidas del MISMO ciclista entre sí. No sirve para comparar
+ * ciclistas: depende de la posición, la bici, el viento y la pendiente, y dos
+ * personas con el mismo EI no rinden igual.
+ */
+export function efficiencyIndex(vamMPerH: number, wattsPerKg: number): number | null {
+    if (!Number.isFinite(vamMPerH) || !Number.isFinite(wattsPerKg) || wattsPerKg <= 0) {
+        return null;
+    }
+    return vamMPerH / wattsPerKg;
+}
+
+export interface TrendCoefficients {
+    /** Cambio por subida, en unidades de la señal. */
+    slope: number;
+    intercept: number;
+    /** Bondad del ajuste, 0-1. */
+    r_squared: number;
+    /** Subidas usadas. */
+    n: number;
+}
+
+/** Subidas mínimas para que una recta signifique algo. */
+export const MIN_CLIMBS_FOR_TREND = 3;
+
+/**
+ * Regresión lineal de una serie sobre el ÍNDICE de subida (0, 1, 2…).
+ *
+ * Devuelve los coeficientes en crudo, sin etiquetarlos. Qué significa una
+ * pendiente negativa de potencia (fatiga, terreno distinto, dosificación
+ * deliberada) depende del contexto del entrenamiento, y no le corresponde a
+ * este módulo decidirlo.
+ */
+export function linearTrend(values: readonly (number | null)[]): TrendCoefficients | null {
+    const pares: [number, number][] = [];
+    values.forEach((v, i) => {
+        if (v !== null && Number.isFinite(v)) pares.push([i, v]);
+    });
+
+    const n = pares.length;
+    if (n < MIN_CLIMBS_FOR_TREND) return null;
+
+    const mediaX = pares.reduce((acc, [x]) => acc + x, 0) / n;
+    const mediaY = pares.reduce((acc, [, y]) => acc + y, 0) / n;
+
+    let sxy = 0;
+    let sxx = 0;
+    let syy = 0;
+    for (const [x, y] of pares) {
+        sxy += (x - mediaX) * (y - mediaY);
+        sxx += (x - mediaX) ** 2;
+        syy += (y - mediaY) ** 2;
+    }
+
+    // Todas las subidas en la misma posición: no hay recta que ajustar.
+    if (sxx === 0) return null;
+
+    const slope = sxy / sxx;
+    return {
+        slope: Math.round(slope * 1e4) / 1e4,
+        intercept: Math.round((mediaY - slope * mediaX) * 1e4) / 1e4,
+        // Sin variación en Y el ajuste es perfecto por definición (recta plana).
+        r_squared: syy === 0 ? 1 : Math.round(((sxy * sxy) / (sxx * syy)) * 1e4) / 1e4,
+        n,
+    };
 }

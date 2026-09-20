@@ -817,3 +817,31 @@ empieza a parecerse a una categoría de federación.
 `difficulty_score` anteriores a este sprint NO son comparables con los nuevos.
 La etiqueta de una misma subida puede cambiar.
 
+### D64. El índice de eficiencia compara subidas, no ciclistas
+
+`EI = VAM / (W/kg)`. Cuántos metros por hora se suben por cada vatio por kilo.
+
+Solo se calcula con **potencia medida** y peso vigente. Con potencia estimada el
+cociente heredaría el error del modelo de Strava y daría una precisión que no
+tiene.
+
+Su limitación viaja en `method`: **sirve para comparar subidas del mismo
+ciclista entre sí, no para comparar ciclistas**. Depende de la posición sobre la
+bici, del material, del viento y de la propia pendiente, así que dos personas
+con el mismo EI no rinden igual. Es la clase de número que invita al ranking
+justo cuando peor lo soporta.
+
+### D66. Las tendencias se devuelven como coeficientes, sin etiqueta
+
+Regresión lineal de la potencia media y de la FC media sobre el índice de subida
+(0, 1, 2…). Se devuelven `slope`, `intercept`, `r_squared` y `n`. Nada más.
+
+**Ni "fatiga", ni "deriva cardiovascular", ni flechas.** Una pendiente negativa
+de potencia a lo largo de una salida puede ser fatiga, pero también terreno
+distinto, dosificación deliberada, viento o una subida final más tendida. Cuál
+de las cuatro es depende del contexto del entrenamiento, y esa lectura le
+corresponde a quien tiene ese contexto, no a este módulo. Hay un test que falla
+si aparecen esas palabras en la salida.
+
+Mínimo **3 subidas**: con dos, una recta pasa exactamente por los dos puntos y
+`r_squared` da 1 siempre, lo que sugeriría una certeza que no existe.
